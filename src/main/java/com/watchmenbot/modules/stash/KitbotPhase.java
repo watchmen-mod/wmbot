@@ -1,0 +1,21 @@
+package com.watchmenbot.modules.stash;
+
+enum KitbotPhase {
+    IDLE,
+    PATHING,
+    OPENING,
+    TAKING,
+    VERIFYING_TRANSFER,
+    TPA_REQUEST,
+    WAITING_FOR_TPY,
+    REACQUIRE_REQUESTER,
+    MOVE_TO_DELIVERY_SPOT,
+    THROWING,
+    PREPARED_THROW,
+    HOME_REQUEST,
+    HOME_COOLDOWN,
+    HOME_CONFIRM,
+    RETURN_TO_ORIGIN,
+    FAILED,
+    DONE
+}

@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WMBot Stash Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .dropzone {
+      margin-top: 18px;
+      border: 1px dashed #65776b;
+      background: rgba(24, 29, 27, .72);
+      border-radius: var(--radius);
+      padding: 13px 16px;
+      color: var(--muted);
+      transition: border-color .16s ease, background .16s ease;
+    }
+
+    .dropzone.is-dragging {
+      border-color: var(--accent);
+      background: rgba(215, 255, 98, .09);
+    }
+
+    .dropzone strong,
+    .item-name strong,
+    .container-card h3 {
+      color: var(--text);
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 65vh;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--panel-2);
+      color: var(--quiet);
+      font-size: .72rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    tbody tr {
+      transition: background .12s ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(108, 214, 182, .07);
+    }
+
+    tbody tr.is-selected,
+    .container-card.is-selected {
+      background: rgba(215, 255, 98, .11);
+      outline: 1px solid rgba(215, 255, 98, .28);
+      outline-offset: -1px;
+    }
+
+    .container-card.is-selected {
+      border-color: rgba(215, 255, 98, .72);
+    }
+
+    .item-name {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .item-name strong {
+      font-size: .98rem;
+    }
+
+    .item-id,
+    .pos {
+      color: var(--quiet);
+      font-family: var(--mono);
+      font-size: .76rem;
+      overflow-wrap: anywhere;
+    }
+
+    .count {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: .95rem;
+      font-weight: 800;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .detail-body {
+      padding: 14px;
+      max-height: 65vh;
+      overflow: auto;
+    }
+
+    .empty {
+      padding: 40px 18px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .detail-title {
+      margin: 0 0 8px;
+      font-size: 1.35rem;
+      line-height: 1.15;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .fact,
+    .location,
+    .container-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(18, 22, 20, .8);
+      min-width: 0;
+    }
+
+    .fact {
+      padding: 10px;
+      background: rgba(32, 38, 34, .5);
+    }
+
+    .fact strong {
+      display: block;
+      margin-top: 5px;
+      font-family: var(--mono);
+      overflow-wrap: anywhere;
+    }
+
+    .locations {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .location {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(14, 17, 16, .62);
+    }
+
+    .location strong {
+      overflow-wrap: anywhere;
+    }
+
+    .pos {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    .containers {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+      padding: 14px;
+      max-height: 65vh;
+      overflow: auto;
+    }
+
+    .container-card {
+      padding: 12px;
+    }
+
+    .container-card h3 {
+      margin: 0 0 7px;
+      font-size: .95rem;
+      overflow-wrap: anywhere;
+    }
+
+    .container-card .items {
+      display: grid;
+      gap: 5px;
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    .tabs {
+      display: inline-flex;
+      gap: 4px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 3px;
+      background: rgba(12, 15, 14, .65);
+    }
+
+    .tab {
+      min-height: 32px;
+      border: 0;
+      border-radius: 5px;
+      padding: .36rem .64rem;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    @media (max-width: 720px) {
+      table {
+        min-width: 660px;
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>Stash Scanner</h1>
+        <p class="subtitle">A local viewer for WMBot stash scans. Drop in <code>stash_inventory_cache.json</code> to browse totals, container locations, shulker counts, skipped containers, and exact slots.</p>
+      </div>
+      <div class="actions">
+        <label class="file-button" title="Open a stash_inventory_cache.json file">
+          Open JSON
+          <input id="fileInput" type="file" accept=".json,application/json">
+        </label>
+        <button id="sampleButton" type="button" title="Load a tiny sample dataset">Sample</button>
+        <button id="clearButton" type="button" title="Clear the loaded stash data">Clear</button>
+      </div>
+    </header>
+
+    <div class="status" id="status">
+      <span class="pill">Waiting for cache file</span>
+      <span class="pill">Expected path: run/watchmenbot/stash_inventory_cache.json</span>
+    </div>
+
+    <section class="dropzone" id="dropzone">
+      <strong>Drop JSON here</strong> or use Open JSON. When served from the project root, this page also tries to auto-load <code>run/watchmenbot/stash_inventory_cache.json</code>.
+    </section>
+
+    <section class="metrics" aria-label="Inventory summary">
+      <div class="metric"><span>Total Items</span><strong id="metricTotalItems">0</strong></div>
+      <div class="metric"><span>Unique Types</span><strong id="metricUniqueItems">0</strong></div>
+      <div class="metric"><span>Containers</span><strong id="metricContainers">0</strong></div>
+      <div class="metric"><span>Shulkers</span><strong id="metricShulkers">0</strong></div>
+      <div class="metric"><span>Skipped</span><strong id="metricSkipped">0</strong></div>
+      <div class="metric"><span>Slots Used</span><strong id="metricSlots">0</strong></div>
+    </section>
+
+    <section class="controls" aria-label="Inventory filters">
+      <div class="field">
+        <label for="searchInput">Search</label>
+        <input id="searchInput" type="search" placeholder="Item, ID, container, position">
+      </div>
+      <div class="field">
+        <label for="typeFilter">Type</label>
+        <select id="typeFilter">
+          <option value="all">All items</option>
+          <option value="shulkers">Shulker boxes</option>
+          <option value="nonshulkers">Non-shulkers</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="groupFilter">Group</label>
+        <select id="groupFilter">
+          <option value="all">All groups</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sortSelect">Sort</label>
+        <select id="sortSelect">
+          <option value="count-desc">Count, high to low</option>
+          <option value="count-asc">Count, low to high</option>
+          <option value="name-asc">Name, A to Z</option>
+          <option value="locations-desc">Locations, high to low</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="section">
+        <div class="section-head">
+          <h2 id="mainTitle">Items</h2>
+          <div class="tabs" aria-label="View mode">
+            <button class="tab" id="itemsTab" type="button" aria-pressed="true">Items</button>
+            <button class="tab" id="containersTab" type="button" aria-pressed="false">Containers</button>
+          </div>
+        </div>
+        <div id="itemsView" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="name">Item</th>
+                <th data-sort="count">Total</th>
+                <th data-sort="stacks">Stacks</th>
+                <th data-sort="locations">Locations</th>
+                <th data-sort="group">Group</th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+          <div id="itemsEmpty" class="empty">Load a stash cache to begin.</div>
+        </div>
+        <div id="containersView" class="containers hidden"></div>
+      </div>
+
+      <aside class="section" aria-label="Selection detail">
+        <div class="section-head">
+          <h2>Details</h2>
+          <span class="pill" id="detailBadge">No selection</span>
+        </div>
+        <div class="detail-body" id="detailBody">
+          <div class="empty">Select an item or container to see exact slots and positions.</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const els = {
+      fileInput: document.getElementById('fileInput'),
+      sampleButton: document.getElementById('sampleButton'),
+      clearButton: document.getElementById('clearButton'),
+      status: document.getElementById('status'),
+      dropzone: document.getElementById('dropzone'),
+      searchInput: document.getElementById('searchInput'),
+      typeFilter: document.getElementById('typeFilter'),
+      groupFilter: document.getElementById('groupFilter'),
+      sortSelect: document.getElementById('sortSelect'),
+      metricTotalItems: document.getElementById('metricTotalItems'),
+      metricUniqueItems: document.getElementById('metricUniqueItems'),
+      metricContainers: document.getElementById('metricContainers'),
+      metricShulkers: document.getElementById('metricShulkers'),
+      metricSkipped: document.getElementById('metricSkipped'),
+      metricSlots: document.getElementById('metricSlots'),
+      itemsBody: document.getElementById('itemsBody'),
+      itemsEmpty: document.getElementById('itemsEmpty'),
+      itemsView: document.getElementById('itemsView'),
+      containersView: document.getElementById('containersView'),
+      detailBody: document.getElementById('detailBody'),
+      detailBadge: document.getElementById('detailBadge'),
+      itemsTab: document.getElementById('itemsTab'),
+      containersTab: document.getElementById('containersTab'),
+      mainTitle: document.getElementById('mainTitle')
+    };
+
+    const state = {
+      cache: null,
+      items: [],
+      containers: [],
+      selectedItemId: null,
+      selectedContainerId: null,
+      view: 'items'
+    };
+
+    const sampleCache = {
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      server: 'sample',
+      dimension: 'minecraft:overworld',
+      scan: { startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), containersSeen: 2, containersScanned: 2, containersSkipped: 0, containersFailed: 0 },
+      containers: [
+        {
+          id: 'chest:120,64,-32',
+          type: 'chest',
+          size: 27,
+          positions: [{ x: 120, y: 64, z: -32 }],
+          interactionPos: { x: 120, y: 64, z: -31 },
+          scannedAt: new Date().toISOString(),
+          items: [
+            { slot: 0, itemId: 'minecraft:diamond', displayName: 'Diamond', count: 42, components: '{}', isShulkerBox: false },
+            { slot: 1, itemId: 'minecraft:oak_log', displayName: 'Oak Log', count: 128, components: '{}', isShulkerBox: false }
+          ]
+        },
+        {
+          id: 'shulker_wall:122,64,-32',
+          type: 'shulker_wall',
+          size: 27,
+          positions: [{ x: 122, y: 64, z: -32 }, { x: 123, y: 64, z: -32 }],
+          interactionPos: { x: 122, y: 64, z: -31 },
+          scannedAt: new Date().toISOString(),
+          items: [
+            { slot: 4, itemId: 'minecraft:blue_shulker_box', displayName: 'Blue Shulker Box', count: 3, components: '{}', isShulkerBox: true },
+            { slot: 7, itemId: 'minecraft:ender_pearl', displayName: 'Ender Pearl', count: 64, components: '{}', isShulkerBox: false }
+          ]
+        }
+      ],
+      skipped: []
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[char]);
+    }
+
+    function fmtNumber(value) {
+      return Number(value || 0).toLocaleString();
+    }
+
+    function fmtDate(value) {
+      if (!value) return 'unknown';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
+    }
+
+    function posText(pos) {
+      if (!pos) return 'unknown';
+      return `${pos.x}, ${pos.y}, ${pos.z}`;
+    }
+
+    function positionsText(positions) {
+      if (!Array.isArray(positions) || positions.length === 0) return 'unknown';
+      return positions.map(posText).join(' | ');
+    }
+
+    function itemGroup(itemId) {
+      const clean = String(itemId || '').replace(/^minecraft:/, '');
+      if (clean.includes('shulker_box')) return 'shulker boxes';
+      if (clean.includes('sword') || clean.includes('pickaxe') || clean.includes('axe') || clean.includes('shovel') || clean.includes('hoe') || clean.includes('helmet') || clean.includes('chestplate') || clean.includes('leggings') || clean.includes('boots') || clean.includes('elytra') || clean.includes('shield') || clean.includes('bow') || clean.includes('crossbow')) return 'gear';
+      if (clean.includes('log') || clean.includes('planks') || clean.includes('stone') || clean.includes('brick') || clean.includes('glass') || clean.includes('concrete') || clean.includes('terracotta') || clean.includes('wool')) return 'building';
+      if (clean.includes('ore') || clean.includes('ingot') || clean.includes('diamond') || clean.includes('emerald') || clean.includes('netherite') || clean.includes('lapis') || clean.includes('redstone') || clean.includes('quartz') || clean.includes('coal')) return 'materials';
+      if (clean.includes('potion') || clean.includes('pearl') || clean.includes('rocket') || clean.includes('totem') || clean.includes('golden_apple')) return 'utility';
+      if (clean.includes('beef') || clean.includes('pork') || clean.includes('bread') || clean.includes('carrot') || clean.includes('potato') || clean.includes('apple') || clean.includes('melon') || clean.includes('fish')) return 'food';
+      return 'other';
+    }
+
+    function normalizeCache(cache) {
+      const containers = Array.isArray(cache?.containers) ? cache.containers : [];
+      const fromIndex = cache?.itemIndex && typeof cache.itemIndex === 'object'
+        ? Object.entries(cache.itemIndex).map(([itemId, entry]) => ({
+            itemId,
+            displayName: entry?.displayName || itemId,
+            totalCount: Number(entry?.totalCount || 0),
+            locations: Array.isArray(entry?.locations) ? entry.locations : [],
+            isShulkerBox: itemId.includes('shulker_box')
+          }))
+        : [];
+
+      const byId = new Map(fromIndex.map(item => [item.itemId, item]));
+
+      containers.forEach(container => {
+        (container.items || []).forEach(item => {
+          if (!item || !item.itemId) return;
+          if (!byId.has(item.itemId)) {
+            byId.set(item.itemId, {
+              itemId: item.itemId,
+              displayName: item.displayName || item.itemId,
+              totalCount: 0,
+              locations: [],
+              isShulkerBox: Boolean(item.isShulkerBox)
+            });
+          }
+          const entry = byId.get(item.itemId);
+          if (!fromIndex.length) {
+            entry.totalCount += Number(item.count || 0);
+            entry.locations.push({
+              containerId: container.id,
+              containerType: container.type,
+              positions: container.positions || [],
+              slot: item.slot,
+              count: item.count
+            });
+          }
+          entry.isShulkerBox = entry.isShulkerBox || Boolean(item.isShulkerBox);
+          entry.displayName = entry.displayName || item.displayName || item.itemId;
+        });
+      });
+
+      const items = [...byId.values()].map(item => ({
+        ...item,
+        group: itemGroup(item.itemId),
+        stacks: item.totalCount / 64
+      }));
+
+      return { items, containers };
+    }
+
+    function loadCache(cache, sourceLabel) {
+      state.cache = cache || null;
+      const normalized = normalizeCache(cache || {});
+      state.items = normalized.items;
+      state.containers = normalized.containers;
+      state.selectedItemId = state.items[0]?.itemId || null;
+      state.selectedContainerId = null;
+      rebuildGroupFilter();
+      setStatus(sourceLabel);
+      render();
+    }
+
+    function setStatus(sourceLabel) {
+      const cache = state.cache;
+      if (!cache) {
+        els.status.innerHTML = '<span class="pill">Waiting for cache file</span><span class="pill">Expected path: run/watchmenbot/stash_inventory_cache.json</span>';
+        return;
+      }
+      els.status.innerHTML = [
+        `Source: ${sourceLabel || 'loaded JSON'}`,
+        `Updated: ${fmtDate(cache.updatedAt)}`,
+        `Server: ${cache.server || 'unknown'}`,
+        `Dimension: ${cache.dimension || 'unknown'}`
+      ].map(text => `<span class="pill">${escapeHtml(text)}</span>`).join('');
+    }
+
+    function rebuildGroupFilter() {
+      const current = els.groupFilter.value;
+      const groups = [...new Set(state.items.map(item => item.group))].sort();
+      els.groupFilter.innerHTML = '<option value="all">All groups</option>' + groups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group)}</option>`).join('');
+      if (groups.includes(current)) els.groupFilter.value = current;
+    }
+
+    function filteredItems() {
+      const query = els.searchInput.value.trim().toLowerCase();
+      const type = els.typeFilter.value;
+      const group = els.groupFilter.value;
+      const sort = els.sortSelect.value;
+
+      let items = state.items.filter(item => {
+        if (type === 'shulkers' && !item.isShulkerBox) return false;
+        if (type === 'nonshulkers' && item.isShulkerBox) return false;
+        if (group !== 'all' && item.group !== group) return false;
+        if (!query) return true;
+        const haystack = [
+          item.displayName,
+          item.itemId,
+          item.group,
+          ...(item.locations || []).flatMap(loc => [loc.containerId, loc.containerType, positionsText(loc.positions)])
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
+
+      items.sort((a, b) => {
+        if (sort === 'count-asc') return a.totalCount - b.totalCount || a.displayName.localeCompare(b.displayName);
+        if (sort === 'name-asc') return a.displayName.localeCompare(b.displayName);
+        if (sort === 'locations-desc') return (b.locations?.length || 0) - (a.locations?.length || 0) || b.totalCount - a.totalCount;
+        return b.totalCount - a.totalCount || a.displayName.localeCompare(b.displayName);
+      });
+
+      return items;
+    }
+
+    function render() {
+      renderMetrics();
+      renderItems();
+      renderContainers();
+      renderDetail();
+      els.itemsTab.setAttribute('aria-pressed', String(state.view === 'items'));
+      els.containersTab.setAttribute('aria-pressed', String(state.view === 'containers'));
+      els.itemsView.classList.toggle('hidden', state.view !== 'items');
+      els.containersView.classList.toggle('hidden', state.view !== 'containers');
+      els.mainTitle.textContent = state.view === 'items' ? 'Items' : 'Containers';
+    }
+
+    function renderMetrics() {
+      const totalItems = state.items.reduce((sum, item) => sum + item.totalCount, 0);
+      const shulkers = state.items.filter(item => item.isShulkerBox).reduce((sum, item) => sum + item.totalCount, 0);
+      const slots = state.containers.reduce((sum, container) => sum + ((container.items || []).length), 0);
+      els.metricTotalItems.textContent = fmtNumber(totalItems);
+      els.metricUniqueItems.textContent = fmtNumber(state.items.length);
+      els.metricContainers.textContent = fmtNumber(state.containers.length);
+      els.metricShulkers.textContent = fmtNumber(shulkers);
+      els.metricSkipped.textContent = fmtNumber((state.cache?.skipped || []).length);
+      els.metricSlots.textContent = fmtNumber(slots);
+    }
+
+    function renderItems() {
+      const items = filteredItems();
+      els.itemsEmpty.classList.toggle('hidden', items.length > 0);
+      els.itemsEmpty.textContent = state.cache ? 'No items match the current filters.' : 'Load a stash cache to begin.';
+
+      els.itemsBody.innerHTML = items.map(item => `
+        <tr data-item-id="${escapeHtml(item.itemId)}" class="${item.itemId === state.selectedItemId ? 'is-selected' : ''}">
+          <td>
+            <span class="item-name">
+              <strong>${escapeHtml(item.displayName || item.itemId)}</strong>
+              <span class="item-id">${escapeHtml(item.itemId)}</span>
+            </span>
+          </td>
+          <td><span class="count">${fmtNumber(item.totalCount)}</span></td>
+          <td>${escapeHtml(item.stacks.toFixed(2))}</td>
+          <td>${fmtNumber((item.locations || []).length)}</td>
+          <td><span class="pill">${escapeHtml(item.group)}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderContainers() {
+      const query = els.searchInput.value.trim().toLowerCase();
+      const containers = state.containers.filter(container => {
+        if (!query) return true;
+        const haystack = [
+          container.id,
+          container.type,
+          positionsText(container.positions),
+          ...(container.items || []).flatMap(item => [item.displayName, item.itemId])
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
+
+      if (!state.cache) {
+        els.containersView.innerHTML = '<div class="empty">Load a stash cache to begin.</div>';
+        return;
+      }
+
+      if (!containers.length) {
+        els.containersView.innerHTML = '<div class="empty">No containers match the current search.</div>';
+        return;
+      }
+
+      els.containersView.innerHTML = containers.map(container => {
+        const total = (container.items || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
+        const preview = (container.items || []).slice(0, 4).map(item => `<span>${escapeHtml(item.displayName || item.itemId)} <span class="count">${fmtNumber(item.count)}</span></span>`).join('');
+        const more = (container.items || []).length > 4 ? `<span class="muted">+${(container.items || []).length - 4} more slots</span>` : '';
+        return `
+          <article class="container-card ${container.id === state.selectedContainerId ? 'is-selected' : ''}" data-container-id="${escapeHtml(container.id)}">
+            <h3>${escapeHtml(container.id || 'unknown container')}</h3>
+            <div class="pos">${escapeHtml(container.type || 'container')} | ${escapeHtml(positionsText(container.positions))}</div>
+            <div class="detail-grid">
+              <div class="fact"><span>Slots</span><strong>${fmtNumber((container.items || []).length)} / ${fmtNumber(container.size || 0)}</strong></div>
+              <div class="fact"><span>Items</span><strong>${fmtNumber(total)}</strong></div>
+            </div>
+            <div class="items">${preview}${more}</div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function renderDetail() {
+      if (state.view === 'containers' && state.selectedContainerId) {
+        const container = state.containers.find(item => item.id === state.selectedContainerId);
+        if (container) return renderContainerDetail(container);
+      }
+
+      const item = state.items.find(entry => entry.itemId === state.selectedItemId);
+      if (!item) {
+        els.detailBadge.textContent = 'No selection';
+        els.detailBody.innerHTML = '<div class="empty">Select an item or container to see exact slots and positions.</div>';
+        return;
+      }
+
+      els.detailBadge.textContent = `${fmtNumber(item.totalCount)} total`;
+      els.detailBody.innerHTML = `
+        <h3 class="detail-title">${escapeHtml(item.displayName || item.itemId)}</h3>
+        <div class="item-id">${escapeHtml(item.itemId)}</div>
+        <div class="detail-grid">
+          <div class="fact"><span>Total</span><strong>${fmtNumber(item.totalCount)}</strong></div>
+          <div class="fact"><span>Stacks</span><strong>${escapeHtml(item.stacks.toFixed(2))}</strong></div>
+          <div class="fact"><span>Locations</span><strong>${fmtNumber((item.locations || []).length)}</strong></div>
+          <div class="fact"><span>Group</span><strong>${escapeHtml(item.group)}</strong></div>
+        </div>
+        <h2>Locations</h2>
+        <div class="locations">
+          ${(item.locations || []).map(loc => `
+            <div class="location">
+              <div>
+                <strong>${escapeHtml(loc.containerId || 'unknown container')}</strong>
+                <div class="pos">${escapeHtml(loc.containerType || 'container')} | slot ${escapeHtml(loc.slot)} | ${escapeHtml(positionsText(loc.positions))}</div>
+              </div>
+              <span class="tag">${fmtNumber(loc.count)}</span>
+            </div>
+          `).join('') || '<div class="empty">No locations recorded for this item.</div>'}
+        </div>
+      `;
+    }
+
+    function renderContainerDetail(container) {
+      const total = (container.items || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
+      els.detailBadge.textContent = `${fmtNumber((container.items || []).length)} slots`;
+      els.detailBody.innerHTML = `
+        <h3 class="detail-title">${escapeHtml(container.id || 'unknown container')}</h3>
+        <div class="item-id">${escapeHtml(container.type || 'container')}</div>
+        <div class="detail-grid">
+          <div class="fact"><span>Total Items</span><strong>${fmtNumber(total)}</strong></div>
+          <div class="fact"><span>Slots Used</span><strong>${fmtNumber((container.items || []).length)} / ${fmtNumber(container.size || 0)}</strong></div>
+          <div class="fact"><span>Position</span><strong>${escapeHtml(positionsText(container.positions))}</strong></div>
+          <div class="fact"><span>Scanned</span><strong>${escapeHtml(fmtDate(container.scannedAt))}</strong></div>
+        </div>
+        <h2>Slot Contents</h2>
+        <div class="locations">
+          ${(container.items || []).map(item => `
+            <div class="location">
+              <div>
+                <strong>${escapeHtml(item.displayName || item.itemId)}</strong>
+                <div class="pos">${escapeHtml(item.itemId)} | slot ${escapeHtml(item.slot)}${item.isShulkerBox ? ' | shulker' : ''}</div>
+              </div>
+              <span class="tag">${fmtNumber(item.count)}</span>
+            </div>
+          `).join('') || '<div class="empty">This container had no recorded items.</div>'}
+        </div>
+      `;
+    }
+
+    async function readFile(file) {
+      if (!file) return;
+      try {
+        const text = await file.text();
+        loadCache(JSON.parse(text), file.name);
+      } catch (error) {
+        alert(`Could not load JSON: ${error.message}`);
+      }
+    }
+
+    async function tryAutoLoad() {
+      const candidates = [
+        'run/watchmenbot/stash_inventory_cache.json',
+        'watchmenbot/stash_inventory_cache.json',
+        'stash_inventory_cache.json'
+      ];
+      for (const path of candidates) {
+        try {
+          const response = await fetch(path, { cache: 'no-store' });
+          if (!response.ok) continue;
+          const cache = await response.json();
+          loadCache(cache, path);
+          return;
+        } catch (error) {
+          // File URLs and missing local files commonly land here; manual load still works.
+        }
+      }
+      render();
+    }
+
+    els.fileInput.addEventListener('change', event => readFile(event.target.files[0]));
+    els.sampleButton.addEventListener('click', () => loadCache(sampleCache, 'sample data'));
+    els.clearButton.addEventListener('click', () => loadCache(null, null));
+    els.searchInput.addEventListener('input', render);
+    els.typeFilter.addEventListener('change', render);
+    els.groupFilter.addEventListener('change', render);
+    els.sortSelect.addEventListener('change', render);
+
+    els.itemsTab.addEventListener('click', () => {
+      state.view = 'items';
+      state.selectedContainerId = null;
+      render();
+    });
+
+    els.containersTab.addEventListener('click', () => {
+      state.view = 'containers';
+      state.selectedItemId = null;
+      state.selectedContainerId = state.containers[0]?.id || null;
+      render();
+    });
+
+    els.itemsBody.addEventListener('click', event => {
+      const row = event.target.closest('[data-item-id]');
+      if (!row) return;
+      state.selectedItemId = row.dataset.itemId;
+      state.selectedContainerId = null;
+      render();
+    });
+
+    els.containersView.addEventListener('click', event => {
+      const card = event.target.closest('[data-container-id]');
+      if (!card) return;
+      state.selectedContainerId = card.dataset.containerId;
+      state.selectedItemId = null;
+      render();
+    });
+
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const sort = th.dataset.sort;
+        const map = {
+          name: 'name-asc',
+          count: els.sortSelect.value === 'count-desc' ? 'count-asc' : 'count-desc',
+          locations: 'locations-desc',
+          group: 'name-asc',
+          stacks: 'count-desc'
+        };
+        els.sortSelect.value = map[sort] || 'count-desc';
+        render();
+      });
+    });
+
+    ['dragenter', 'dragover'].forEach(type => {
+      els.dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropzone.classList.add('is-dragging');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(type => {
+      els.dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropzone.classList.remove('is-dragging');
+      });
+    });
+
+    els.dropzone.addEventListener('drop', event => readFile(event.dataTransfer.files[0]));
+
+    tryAutoLoad();
+  </script>
+</body>
+</html>
