@@ -30,12 +30,15 @@ Use this as a solid starting inventory. The bot can recover from some problems, 
 
 ![Recommended Plane Builder inventory](./plane_builder_inventory.png)
 
+**Important: the screenshot is missing loose obsidian. Put loose obsidian in your inventory before starting `plane-builder`; the bot needs loose obsidian to begin the build process.**
+
 Recommended loadout:
 
 - Full armor.
 - Elytra equipped or ready if you plan to use `auto-elytra-fly`.
 - Totems in inventory and offhand.
 - Golden apples for Meteor Auto Eat.
+- Loose obsidian to start the build process.
 - Multiple non-Silk Touch pickaxes.
 - Bow with arrows.
 - Ender chest.
