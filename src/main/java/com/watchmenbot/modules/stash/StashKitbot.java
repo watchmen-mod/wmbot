@@ -9,12 +9,8 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 
-import java.io.IOException;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
 
 public class StashKitbot extends Module {
     private final SettingGroup sgRequest = settings.getDefaultGroup();
@@ -49,9 +45,6 @@ public class StashKitbot extends Module {
     private final Setting<Integer> fallbackCooldownTicks = kitbotSettings.fallbackCooldownTicks();
     private final Setting<Boolean> traceLogs = kitbotSettings.traceLogs();
 
-    private StashKitbotQueueState.DeliveryResume pendingDeliveryResume;
-    private boolean persistentQueueLoaded;
-
     private final StashInventoryCache cache = new StashInventoryCache();
     private final StashTargetDiscovery discovery = new StashTargetDiscovery();
     private final StashNavigator navigator = new StashNavigator();
@@ -85,15 +78,140 @@ public class StashKitbot extends Module {
 
         @Override
         public void failRequest(String message) {
-            StashKitbot.this.failRequest(message);
+            lifecycleWorkflow.failRequest(message);
         }
 
         @Override
         public void delivered(KitRequest request) {
-            StashKitbot.this.recordDeliveryStats(request);
-            StashKitbot.this.notifyDiscordDelivery(request);
+            statsWorkflow.delivered(request, statsSettings());
         }
     };
+    private final StashKitbotStatsWorkflow statsWorkflow = new StashKitbotStatsWorkflow(
+        mc,
+        session,
+        stats,
+        discord,
+        new StashKitbotStatsWorkflow.Callbacks() {
+            @Override
+            public void warning(String message, Object... args) {
+                StashKitbot.this.warning(message, args);
+            }
+        }
+    );
+    private final StashKitbotAcceptanceWorkflow acceptanceWorkflow = new StashKitbotAcceptanceWorkflow(
+        mc,
+        session,
+        cache,
+        inventory,
+        stockPlanner,
+        new StashKitbotAcceptanceWorkflow.Callbacks() {
+            @Override
+            public void reply(String player, String message) {
+                StashKitbot.this.reply(player, message);
+            }
+
+            @Override
+            public void queueReply(String player, String message) {
+                StashKitbot.this.queueReply(player, message);
+            }
+
+            @Override
+            public void info(String message, Object... args) {
+                StashKitbot.this.info(message, args);
+            }
+
+            @Override
+            public void warning(String message, Object... args) {
+                StashKitbot.this.warning(message, args);
+            }
+        }
+    );
+    private final StashKitbotQueueWorkflow queueWorkflow = new StashKitbotQueueWorkflow(
+        mc,
+        session,
+        inventory,
+        new StashKitbotQueueWorkflow.Callbacks() {
+            @Override
+            public void reply(String player, String message) {
+                StashKitbot.this.reply(player, message);
+            }
+
+            @Override
+            public void info(String message, Object... args) {
+                StashKitbot.this.info(message, args);
+            }
+
+            @Override
+            public void warning(String message, Object... args) {
+                StashKitbot.this.warning(message, args);
+            }
+
+            @Override
+            public boolean startRequest(KitbotRequesterAccess access, KitCommand command, boolean queued) {
+                return acceptanceWorkflow.startRequest(access, command, queued);
+            }
+        }
+    );
+    private final StashKitbotLifecycleWorkflow lifecycleWorkflow = new StashKitbotLifecycleWorkflow(
+        mc,
+        session,
+        navigator,
+        safetyGuard,
+        delivery,
+        messenger,
+        queueWorkflow,
+        new StashKitbotLifecycleWorkflow.Callbacks() {
+            @Override
+            public void reply(String player, String message) {
+                StashKitbot.this.reply(player, message);
+            }
+
+            @Override
+            public void warning(String message, Object... args) {
+                StashKitbot.this.warning(message, args);
+            }
+        }
+    );
+    private final StashKitbotRequestWorkflow requestWorkflow = new StashKitbotRequestWorkflow(
+        mc,
+        session,
+        cache,
+        inventory,
+        requestParser,
+        stockPlanner,
+        cooldowns,
+        new StashKitbotRequestWorkflow.Callbacks() {
+            @Override
+            public void reply(String player, String message) {
+                StashKitbot.this.reply(player, message);
+            }
+
+            @Override
+            public void info(String message, Object... args) {
+                StashKitbot.this.info(message, args);
+            }
+
+            @Override
+            public void warning(String message, Object... args) {
+                StashKitbot.this.warning(message, args);
+            }
+
+            @Override
+            public void savePersistentQueueState() {
+                queueWorkflow.savePersistentQueueState();
+            }
+
+            @Override
+            public boolean startRequest(KitbotRequesterAccess access, KitCommand command, boolean queued) {
+                return acceptanceWorkflow.startRequest(access, command, queued);
+            }
+
+            @Override
+            public void handleCooldownMessage(String message) {
+                StashKitbot.this.handleCooldownMessage(message);
+            }
+        }
+    );
     private final StashKitbotGatherWorkflow gatherWorkflow = new StashKitbotGatherWorkflow(
         mc,
         session,
@@ -121,29 +239,12 @@ public class StashKitbot extends Module {
 
     @Override
     public void onActivate() {
-        persistentQueueLoaded = false;
-        pendingDeliveryResume = null;
+        lifecycleWorkflow.activate();
     }
 
     @Override
     public void onDeactivate() {
-        KitRequest request = session.activeRequest();
-        if (request != null && session.isDeliveryPhase() && request.delivery.commands.tpaSent) {
-            pendingDeliveryResume = StashKitbotQueueState.resumeFromRequest(request);
-            if (pendingDeliveryResume != null) {
-                info("Saved cross-server delivery resume for %d x '%s' to %s.", request.count, request.kitName, request.requester);
-            }
-        }
-
-        savePersistentQueueState();
-        delivery.stopWalking();
-        navigator.stop();
-        safetyGuard.restore();
-        safetyGuard.cancelBreaking(mc);
-        StashClientUtils.closeContainerScreen(mc);
-        session.clearRequest();
-        session.clearQueuedRequests();
-        persistentQueueLoaded = false;
+        lifecycleWorkflow.deactivate();
     }
 
     @Override
@@ -152,117 +253,24 @@ public class StashKitbot extends Module {
     }
 
     public KitbotStatsSnapshot statsSnapshot() {
-        StashKitbotStats.PersistentStats persistent = stats.snapshot(mc);
-        KitRequest request = session.activeRequest();
-        CurrentRequest currentRequest = request == null ? null : new CurrentRequest(
-            request.requester,
-            request.kitName,
-            request.count,
-            request.gather.gathered,
-            request.delivery.delivered
-        );
-
-        return new KitbotStatsSnapshot(
-            isActive(),
-            session.phase().name().toLowerCase(Locale.ROOT),
-            currentRequest,
-            session.queuedCount(),
-            persistent.completedDeliveries(),
-            persistent.deliveredShulkers(),
-            persistent.topRequesters()
-        );
+        return statsWorkflow.snapshot(isActive());
     }
 
     @EventHandler
     private void onReceiveMessage(ReceiveMessageEvent event) {
-        loadPersistentQueueState();
+        queueWorkflow.loadPersistentQueueState();
 
         String message = event.getMessage().getString();
-        handleCooldownMessage(message);
-
-        Whisper whisper = requestParser.parseWhisper(message);
-        if (whisper == null) return;
-
-        Optional<KitbotRequesterAccess> access = StashKitbotAccessPlanner.resolveAccess(
-            whisper.sender(),
-            tier1Nicknames.get(),
-            tier1CooldownTicks.get(),
-            tier2Nicknames.get(),
-            tier2CooldownTicks.get()
-        );
-        if (access.isEmpty()) return;
-
-        KitRequestIntent intent = requestParser.parseIntent(whisper.body());
-        if (intent.isListKits()) {
-            replyAvailableKits(access.get());
-            return;
-        }
-
-        KitCommand command = requestParser.parseCommand(
-            whisper.body(),
-            access.get().tier() == KitbotTier.TIER_2,
-            StashKitbotAccessPlanner.TIER_2_DEFAULT_KIT
-        );
-        if (command == null) return;
-
-        if (command.count() <= 0) {
-            reply(whisper.sender(), "Invalid kit count.");
-            return;
-        }
-
-        if (command.count() > maxRequestCount.get()) {
-            reply(whisper.sender(), "Request too large. Max is %d shulkers.".formatted(maxRequestCount.get()));
-            return;
-        }
-
-        if (!StashKitbotAccessPlanner.requestAllowed(access.get(), command, tier2KitWhitelist.get())) {
-            reply(whisper.sender(), "That kit is not available for your tier.");
-            return;
-        }
-
-        long remainingCooldownMillis = cooldowns.remainingMillis(mc, access.get());
-        if (remainingCooldownMillis > 0L) {
-            reply(whisper.sender(), "Please wait %s before requesting another kit.".formatted(StashKitbotAccessPlanner.formatCooldown(remainingCooldownMillis)));
-            return;
-        }
-
-        if (rejectDuplicateRequest(access.get())) return;
-
-        if (StashKitbotQueuePlanner.shouldQueue(session.hasActiveRequest(), session.queuedCount())) {
-            enqueueRequest(access.get(), command);
-            return;
-        }
-
-        if (startRequest(access.get(), command, false)) cooldowns.start(mc, access.get());
-    }
-
-    private void replyAvailableKits(KitbotRequesterAccess access) {
-        CacheFile cacheFile;
-        try {
-            cacheFile = cache.read(mc);
-        }
-        catch (IOException exception) {
-            reply(access.requester(), "Failed to read stash cache.");
-            warning("Failed to read stash inventory cache before listing kits: %s.", exception.getMessage());
-            return;
-        }
-
-        List<String> kitNames = stockPlanner.availableKitNames(cacheFile, inventory.allKitCounts(), access, tier2KitWhitelist.get());
-        for (String message : stockPlanner.kitListMessages(kitNames)) {
-            reply(access.requester(), message);
-        }
+        requestWorkflow.handleMessage(message, requestSettings());
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        loadPersistentQueueState();
+        queueWorkflow.loadPersistentQueueState();
 
         if (!session.hasActiveRequest()) {
-            if (canWork() && pendingDeliveryResume != null) {
-                tryResumeDelivery();
-                return;
-            }
-            if (canWork()) promoteQueuedRequests();
+            if (canWork() && queueWorkflow.tryResumeDelivery(queueSettings())) return;
+            if (canWork()) queueWorkflow.promoteQueuedRequests();
             if (session.hasActiveRequest() && session.phase() == KitbotPhase.TPA_REQUEST && !session.activeRequest().delivery.commands.tpaSent) {
                 return;
             }
@@ -281,11 +289,11 @@ public class StashKitbot extends Module {
         switch (beforePhase) {
             case IDLE, PATHING, OPENING, TAKING, VERIFYING_TRANSFER -> gatherWorkflow.tick(gatherSettings());
             case TPA_REQUEST, WAITING_FOR_TPY, REACQUIRE_REQUESTER, MOVE_TO_DELIVERY_SPOT, THROWING, PREPARED_THROW, HOME_REQUEST, HOME_COOLDOWN, HOME_CONFIRM, RETURN_TO_ORIGIN -> deliveryWorkflow.tick(deliverySettings());
-            case FAILED, DONE -> finishRequest();
+            case FAILED, DONE -> lifecycleWorkflow.finishRequest();
         }
 
         tracePhaseTransition(beforePhase, beforeRequest);
-        if (!session.hasActiveRequest()) promoteQueuedRequests();
+        if (!session.hasActiveRequest()) queueWorkflow.promoteQueuedRequests();
         messenger.tickWhisperQueue(replyCommand.get());
     }
 
@@ -296,254 +304,8 @@ public class StashKitbot extends Module {
         if (safetyGuard.cancelDestroyPacket(event)) {
             safetyGuard.cancelBreaking(mc);
             navigator.stop();
-            failRequest("Stopped because a block-breaking packet was cancelled.");
+            lifecycleWorkflow.failRequest("Stopped because a block-breaking packet was cancelled.");
         }
-    }
-
-    private void enqueueRequest(KitbotRequesterAccess access, KitCommand command) {
-        if (requestIsAmbiguous(access.requester(), command)) return;
-
-        int queuedCount = session.queuedCount();
-        int maxQueued = maxQueuedRequests.get();
-        if (!StashKitbotQueuePlanner.canEnqueue(maxQueued, queuedCount)) {
-            if (maxQueued <= 0) {
-                KitRequest activeRequest = session.activeRequest();
-                if (activeRequest != null) {
-                    reply(access.requester(), "Busy gathering %s for %s: %d/%d collected.".formatted(
-                        activeRequest.kitName,
-                        activeRequest.requester,
-                        activeRequest.gather.gathered,
-                        activeRequest.count
-                    ));
-                }
-                else {
-                    reply(access.requester(), "Busy. Request queueing is disabled.");
-                }
-            }
-            else {
-                reply(access.requester(), "Request queue is full (%d waiting). Please try again later.".formatted(queuedCount));
-            }
-            return;
-        }
-
-        int position = StashKitbotQueuePlanner.queuePosition(queuedCount);
-        session.enqueue(new QueuedKitRequest(access, command));
-        savePersistentQueueState();
-        cooldowns.start(mc, access);
-        reply(access.requester(), "Queued '%s' x%d. Position %d/%d.".formatted(command.name(), command.count(), position, maxQueued));
-        info("Queued stash kit request from %s: %s x%d at position %d/%d.", access.requester(), command.name(), command.count(), position, maxQueued);
-    }
-
-    private boolean rejectDuplicateRequest(KitbotRequesterAccess access) {
-        RequesterRequestStatus status = session.requestStatus(access.normalizedRequester());
-        if (status == RequesterRequestStatus.NONE) return false;
-
-        if (status == RequesterRequestStatus.ACTIVE) {
-            KitRequest activeRequest = session.activeRequest();
-            if (activeRequest != null) {
-                reply(access.requester(), "You already have a kit request in progress: '%s' x%d.".formatted(activeRequest.kitName, activeRequest.count));
-            }
-            else {
-                reply(access.requester(), "You already have a kit request in progress.");
-            }
-            return true;
-        }
-
-        reply(access.requester(), "You already have a kit request queued. Please wait for it to finish before requesting another.");
-        return true;
-    }
-
-    private void promoteQueuedRequests() {
-        while (!session.hasActiveRequest()) {
-            QueuedKitRequest queued = session.pollNextQueuedRequest();
-            if (queued == null) return;
-
-            savePersistentQueueState();
-            info("Starting queued stash kit request from %s: %s x%d.", queued.access().requester(), queued.command().name(), queued.command().count());
-            startRequest(queued.access(), queued.command(), true);
-        }
-    }
-
-    private boolean startRequest(KitbotRequesterAccess access, KitCommand command, boolean queued) {
-        String requester = access.requester();
-        CacheFile cacheFile;
-        try {
-            cacheFile = cache.read(mc);
-        }
-        catch (IOException exception) {
-            reply(requester, "Failed to read stash cache.");
-            warning("Failed to read stash inventory cache: %s.", exception.getMessage());
-            return false;
-        }
-
-        Map<String, Integer> inventoryCounts = inventory.matchingKitCounts(command.name(), command.quotedSearch());
-        if ((cacheFile == null || cacheFile.containers() == null || cacheFile.containers().isEmpty()) && inventoryCounts.isEmpty()) {
-            reply(requester, "No stash inventory cache is available.");
-            return false;
-        }
-
-        StashKitbotStockPlanner.KitResolution resolution = stockPlanner.resolveKit(cacheFile, command.name(), command.quotedSearch(), inventoryCounts);
-        if (resolution.ambiguous()) {
-            replyAmbiguousChoices(requester, command, resolution.choices());
-            return false;
-        }
-        if (!resolution.hasSelection()) {
-            reply(requester, "No shulkers match '%s' in inventory or cache.".formatted(command.name()));
-            return false;
-        }
-
-        SelectedKit kit = resolution.selected();
-        if (kit.totalCount() < command.count()) {
-            reply(requester, "Only %d '%s' shulkers are available across inventory and cache.".formatted(kit.totalCount(), kit.name()));
-            return false;
-        }
-
-        int initialInventoryCount = inventory.matchingInventoryCount(kit.alias());
-        int inventoryMatches = Math.min(command.count(), initialInventoryCount);
-        int remainingToGather = command.count() - inventoryMatches;
-        if (inventory.emptyInventorySlots() < remainingToGather) {
-            reply(requester, "Inventory needs %d empty slots for '%s'.".formatted(remainingToGather, kit.name()));
-            return false;
-        }
-
-        List<KitSource> sources = stockPlanner.buildSources(cacheFile, kit.alias());
-        if (remainingToGather > 0 && sources.isEmpty()) {
-            reply(requester, "No source containers found for '%s'.".formatted(kit.name()));
-            return false;
-        }
-
-        sources.sort(Comparator.comparingDouble(source -> StashClientUtils.playerBlockDistanceSq(mc, source.interactionPos())));
-        KitRequest request = new KitRequest(
-            requester,
-            kit.name(),
-            kit.alias(),
-            command.count(),
-            sources,
-            mc.player.getBlockPos().toImmutable()
-        );
-        request.gather.initialInventoryCount = initialInventoryCount;
-        request.gather.gathered = StashKitbotGatherPlanner.confirmedGathered(command.count(), initialInventoryCount, initialInventoryCount);
-        session.startRequest(request);
-
-        String prefix = queued ? "Starting queued " : "Accepted ";
-        if (inventoryMatches > 0 && remainingToGather > 0) {
-            reply(requester, "%s'%s' x%d. Using %d already in inventory; gathering %d more.".formatted(prefix, kit.name(), command.count(), inventoryMatches, remainingToGather));
-        }
-        else if (inventoryMatches >= command.count()) {
-            session.phase(KitbotPhase.TPA_REQUEST);
-            queueReply(requester, "%s'%s' x%d. I already have it in inventory; sending TPA now.".formatted(prefix, kit.name(), command.count()));
-            info("%s'%s' x%d from current inventory for %s. Queued acceptance whisper after TPA to avoid command cooldown.", prefix, kit.name(), command.count(), requester);
-        }
-        else {
-            reply(requester, "%s'%s' x%d. Gathering now.".formatted(prefix, kit.name(), command.count()));
-        }
-        info("Accepted stash kit request from %s: %s x%d (%d already in inventory, %d to gather).", requester, kit.name(), command.count(), inventoryMatches, remainingToGather);
-        return true;
-    }
-
-    private boolean requestIsAmbiguous(String requester, KitCommand command) {
-        CacheFile cacheFile;
-        try {
-            cacheFile = cache.read(mc);
-        }
-        catch (IOException exception) {
-            reply(requester, "Failed to read stash cache.");
-            warning("Failed to read stash inventory cache before queueing request: %s.", exception.getMessage());
-            return true;
-        }
-
-        Map<String, Integer> inventoryCounts = inventory.matchingKitCounts(command.name(), command.quotedSearch());
-        StashKitbotStockPlanner.KitResolution resolution = stockPlanner.resolveKit(cacheFile, command.name(), command.quotedSearch(), inventoryCounts);
-        if (!resolution.ambiguous()) return false;
-
-        replyAmbiguousChoices(requester, command, resolution.choices());
-        return true;
-    }
-
-    private void replyAmbiguousChoices(String requester, KitCommand command, List<SelectedKit> choices) {
-        reply(requester, stockPlanner.ambiguousChoicesMessage(command.name(), command.count(), choices));
-    }
-
-    private void tryResumeDelivery() {
-        StashKitbotQueueState.DeliveryResume resume = pendingDeliveryResume;
-        pendingDeliveryResume = null;
-        savePersistentQueueState();
-
-        String currentDimension = StashClientUtils.dimensionId(mc);
-        boolean dimensionChanged = StashKitbotDeliveryPlanner.dimensionChangedAfterTpa(resume.preTpaDimension(), currentDimension);
-        if (!dimensionChanged) {
-            reply(resume.requester(), "Delivery resume cancelled for '%s': I am still in the same dimension.".formatted(resume.kitName()));
-            info("Cross-server delivery resume cancelled for '%s': still in same dimension (%s).", resume.kitName(), currentDimension);
-            return;
-        }
-
-        String resumeAlias = StashKitNameNormalizer.alias(resume.kitName());
-        int inventoryCount = inventory.matchingInventoryCount(resumeAlias);
-        if (inventoryCount <= 0) {
-            reply(resume.requester(), "Delivery resume cancelled for '%s': I do not have the kits in inventory anymore.".formatted(resume.kitName()));
-            info("Cross-server delivery resume cancelled for '%s': no items found in inventory.", resume.kitName());
-            return;
-        }
-
-        int gathered = Math.min(resume.gatheredCount(), inventoryCount);
-        if (gathered <= 0) {
-            reply(resume.requester(), "Delivery resume cancelled for '%s': no gathered kits remain in inventory.".formatted(resume.kitName()));
-            info("Cross-server delivery resume cancelled for '%s': no gathered items remain in inventory.", resume.kitName());
-            return;
-        }
-
-        KitRequest request = new KitRequest(resume.requester(), resume.kitName(), resumeAlias, resume.requestedCount(), java.util.List.of(), null);
-        request.gather.initialInventoryCount = 0;
-        request.gather.gathered = gathered;
-        request.delivery.commands.tpaSent = true;
-        request.delivery.preTpaDimension = resume.preTpaDimension();
-        request.delivery.crossDimensionDelivery = true;
-        request.delivery.crossDimensionSettleTicks = 40;
-        request.delivery.requesterReacquire.reset(requesterReacquireTimeoutTicks.get());
-
-        session.startRequest(request);
-        session.phase(KitbotPhase.REACQUIRE_REQUESTER);
-        info("Resuming cross-server delivery after dimension change: %d '%s' to %s in %s.", request.gather.gathered, resume.kitName(), resume.requester(), currentDimension);
-    }
-
-    private void failRequest(String message) {
-        StashClientUtils.closeContainerScreen(mc);
-        navigator.stop();
-        KitRequest activeRequest = session.activeRequest();
-        if (activeRequest != null) reply(activeRequest.requester, message);
-        warning(message);
-        session.phase(KitbotPhase.FAILED);
-    }
-
-    private void finishRequest() {
-        delivery.stopWalking();
-        safetyGuard.restore();
-        messenger.clearCommand();
-        session.clearRequest();
-        savePersistentQueueState();
-    }
-
-    private void recordDeliveryStats(KitRequest request) {
-        stats.recordDelivery(mc, request);
-    }
-
-    private void notifyDiscordDelivery(KitRequest request) {
-        if (!discordWebhook.get()) return;
-
-        String url = discordWebhookUrl.get();
-        if (url == null || url.isBlank()) {
-            warning("Discord webhook is enabled but no webhook URL is configured.");
-            return;
-        }
-
-        discord.send(url, request).whenComplete((sent, exception) -> {
-            if (exception != null) {
-                warning("Failed to send Discord delivery webhook: %s.", exception.getMessage());
-            }
-            else if (!sent) {
-                warning("Discord delivery webhook returned a non-success status.");
-            }
-        });
     }
 
     private void handleCooldownMessage(String message) {
@@ -602,43 +364,31 @@ public class StashKitbot extends Module {
         );
     }
 
+    private StashKitbotRequestWorkflow.Settings requestSettings() {
+        return new StashKitbotRequestWorkflow.Settings(
+            tier1Nicknames.get(),
+            tier1CooldownTicks.get(),
+            tier2Nicknames.get(),
+            tier2CooldownTicks.get(),
+            tier2KitWhitelist.get(),
+            maxQueuedRequests.get(),
+            maxRequestCount.get()
+        );
+    }
+
+    private StashKitbotQueueWorkflow.Settings queueSettings() {
+        return new StashKitbotQueueWorkflow.Settings(requesterReacquireTimeoutTicks.get());
+    }
+
+    private StashKitbotStatsWorkflow.Settings statsSettings() {
+        return new StashKitbotStatsWorkflow.Settings(
+            discordWebhook.get(),
+            discordWebhookUrl.get()
+        );
+    }
+
     private boolean canWork() {
         return StashClientUtils.canUse(mc);
-    }
-
-    private void loadPersistentQueueState() {
-        if (persistentQueueLoaded) return;
-        if (mc == null || mc.runDirectory == null) return;
-
-        StashKitbotQueueState.LoadResult result = StashKitbotQueueState.load(mc);
-        StashKitbotQueueState.State state = result.state();
-        if (result.failed()) warning("Failed to read stash kitbot queue state; starting with an empty persisted queue.");
-
-        if (!session.hasActiveRequest() && session.queuedCount() == 0) {
-            session.replaceQueuedRequests(state.queuedRequests());
-        }
-        if (pendingDeliveryResume == null) pendingDeliveryResume = state.deliveryResume();
-
-        persistentQueueLoaded = true;
-        if (session.queuedCount() > 0 || pendingDeliveryResume != null) {
-            info("Loaded persisted stash kitbot state: %d queued request%s%s.",
-                session.queuedCount(),
-                session.queuedCount() == 1 ? "" : "s",
-                pendingDeliveryResume == null ? "" : " and a pending delivery resume"
-            );
-        }
-    }
-
-    private void savePersistentQueueState() {
-        try {
-            StashKitbotQueueState.write(
-                mc,
-                new StashKitbotQueueState.State(session.queuedRequestsSnapshot(), pendingDeliveryResume)
-            );
-        }
-        catch (IOException exception) {
-            warning("Failed to write stash kitbot queue state: %s.", exception.getMessage());
-        }
     }
 
     public record KitbotStatsSnapshot(

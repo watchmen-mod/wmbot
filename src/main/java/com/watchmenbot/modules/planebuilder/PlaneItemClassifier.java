@@ -1,17 +1,12 @@
 package com.watchmenbot.modules.planebuilder;
 
+import com.watchmenbot.util.ShulkerBoxContentClassifier;
 import net.minecraft.block.Block;
-import net.minecraft.block.ShulkerBoxBlock;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ContainerComponent;
-import net.minecraft.component.type.NbtComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Items;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.ItemTags;
 
@@ -31,9 +26,7 @@ final class PlaneItemClassifier {
     }
 
     static boolean isShulkerBoxStack(ItemStack stack) {
-        return stack != null
-            && !stack.isEmpty()
-            && Block.getBlockFromItem(stack.getItem()) instanceof ShulkerBoxBlock;
+        return ShulkerBoxContentClassifier.isShulkerBoxStack(stack);
     }
 
     static boolean isShulkerWithEnderChests(ItemStack stack) {
@@ -41,83 +34,11 @@ final class PlaneItemClassifier {
     }
 
     static boolean isEmptyShulkerBoxStack(ItemStack stack) {
-        if (!isShulkerBoxStack(stack)) return false;
-
-        ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
-        if (container != null) {
-            for (ItemStack ignored : container.iterateNonEmpty()) {
-                return false;
-            }
-        }
-
-        return !legacyShulkerDataHasItems(stack);
+        return ShulkerBoxContentClassifier.isEmptyShulkerBox(stack);
     }
 
     static int countEnderChestsInShulker(ItemStack stack) {
-        if (!isShulkerBoxStack(stack)) return 0;
-
-        return Math.max(
-            countEnderChestsInContainerComponent(stack),
-            countEnderChestsInLegacyShulkerData(stack)
-        );
-    }
-
-    private static int countEnderChestsInContainerComponent(ItemStack stack) {
-        ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
-        if (container == null) return 0;
-
-        int count = 0;
-        for (ItemStack contained : container.iterateNonEmpty()) {
-            if (contained.isOf(Items.ENDER_CHEST)) count += contained.getCount();
-        }
-
-        return count;
-    }
-
-    private static int countEnderChestsInLegacyShulkerData(ItemStack stack) {
-        return Math.max(
-            countEnderChestsInLegacyShulkerData(stack.get(DataComponentTypes.BLOCK_ENTITY_DATA)),
-            countEnderChestsInLegacyShulkerData(stack.get(DataComponentTypes.CUSTOM_DATA))
-        );
-    }
-
-    private static int countEnderChestsInLegacyShulkerData(NbtComponent component) {
-        if (component == null || component.isEmpty()) return 0;
-
-        NbtCompound nbt = component.copyNbt();
-        int directCount = countEnderChestsInItemsList(nbt);
-        if (directCount > 0) return directCount;
-
-        return countEnderChestsInItemsList(nbt.getCompoundOrEmpty("BlockEntityTag"));
-    }
-
-    private static boolean legacyShulkerDataHasItems(ItemStack stack) {
-        return legacyShulkerDataHasItems(stack.get(DataComponentTypes.BLOCK_ENTITY_DATA))
-            || legacyShulkerDataHasItems(stack.get(DataComponentTypes.CUSTOM_DATA));
-    }
-
-    private static boolean legacyShulkerDataHasItems(NbtComponent component) {
-        if (component == null || component.isEmpty()) return false;
-
-        NbtCompound nbt = component.copyNbt();
-        if (!nbt.getListOrEmpty("Items").isEmpty()) return true;
-
-        return !nbt.getCompoundOrEmpty("BlockEntityTag").getListOrEmpty("Items").isEmpty();
-    }
-
-    private static int countEnderChestsInItemsList(NbtCompound nbt) {
-        if (nbt == null || nbt.isEmpty()) return 0;
-
-        int count = 0;
-        NbtList items = nbt.getListOrEmpty("Items");
-        for (NbtCompound item : items.streamCompounds().toList()) {
-            String id = item.getString("id", "");
-            if ("minecraft:ender_chest".equals(id) || "ender_chest".equals(id)) {
-                count += Math.max(1, item.getByte("count", item.getByte("Count", (byte) 1)));
-            }
-        }
-
-        return count;
+        return ShulkerBoxContentClassifier.countEnderChests(stack);
     }
 
     static boolean isEnderChestSupplyStack(ItemStack stack) {
