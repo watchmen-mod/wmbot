@@ -8,6 +8,7 @@ import net.minecraft.util.math.Vec3d;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertEquals;
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertFalse;
@@ -25,9 +26,11 @@ final class PlaneUtilityPureTest {
         plansAutoWalkSnakeWaypoints();
         correctsAutoElytraTargetsToSnakeRoute();
         classifiesServiceHoleSupport();
+        classifiesServiceHoleCandidates();
         selectsHoleEscapeTargets();
         selectsTrashEdgeTargets();
         selectsKillAuraMobGroups();
+        selectsBowDefenseMobTargets();
         detectsUnsafeEndermanLooks();
         detectsAutoElytraObstructionsAndLandingTargets();
     }
@@ -197,6 +200,84 @@ final class PlaneUtilityPureTest {
         assertTrue(PlaneAreaScanner.serviceSupportUsable(false, true), "solid occupied support is usable");
         assertFalse(PlaneAreaScanner.serviceSupportUsable(true, true), "replaceable support should be filled first");
         assertFalse(PlaneAreaScanner.serviceSupportUsable(false, false), "non-solid occupied support is blocked");
+    }
+
+    private static void classifiesServiceHoleCandidates() {
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.OPEN_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, true, false),
+            "already-open supported service hole is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, true, false),
+            "obsidian capped service hole with valid support is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false, true),
+            "obsidian capped service hole with replaceable support is selectable after support placement"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, true, false),
+            "breakable terrain capped service hole with valid support is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, false, true),
+            "breakable terrain capped service hole with replaceable support is selectable after support placement"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false, false),
+            "non-solid occupied support is rejected"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, false, true),
+            "open replaceable hole without valid support is rejected"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, false, true, false),
+            "arbitrary supported non-service block is rejected"
+        );
+        assertTrue(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, false, false),
+            "generic solid breakable center is a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, false, false, false),
+            "unbreakable center is rejected as a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, false, true, true, false, false),
+            "non-solid occupied center is rejected as a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, true, false),
+            "ender chest center is handled by workflow rather than terrain cap selection"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, false, true),
+            "shulker center is handled by workflow rather than terrain cap selection"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, false, true, false, false),
+            "fluid center is rejected as a service hole cap"
+        );
+
+        assertTrue(
+            PlaneAreaScanner.ServiceHoleCandidate.OPEN_SUPPORTED.priority()
+                < PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED.priority(),
+            "already-open supported service holes are preferred over capped supported holes"
+        );
+        assertTrue(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED.priority()
+                < PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT.priority(),
+            "capped supported service holes are preferred over holes that still need support"
+        );
     }
 
     private static void correctsAutoElytraTargetsToSnakeRoute() {
@@ -496,6 +577,37 @@ final class PlaneUtilityPureTest {
         assertTrue(KillAuraCompanionSettings.isMobGroup(SpawnGroup.UNDERGROUND_WATER_CREATURE), "underground water mobs are selected");
         assertTrue(KillAuraCompanionSettings.isMobGroup(SpawnGroup.AXOLOTLS), "axolotl mobs are selected");
         assertFalse(KillAuraCompanionSettings.isMobGroup(SpawnGroup.MISC), "misc entities are not selected");
+    }
+
+    private static void selectsBowDefenseMobTargets() {
+        UUID botUuid = new UUID(0L, 42L);
+        UUID otherUuid = new UUID(0L, 43L);
+
+        assertTrue(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.MONSTER), "bow defense selects hostile monster mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.CREATURE), "bow defense ignores passive creature mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.AMBIENT), "bow defense ignores ambient mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.WATER_CREATURE), "bow defense ignores water creature mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.WATER_AMBIENT), "bow defense ignores water ambient mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.UNDERGROUND_WATER_CREATURE), "bow defense ignores underground water mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.AXOLOTLS), "bow defense ignores axolotl mobs");
+        assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.MISC), "bow defense ignores misc entities");
+        assertFalse(KillAuraCompanionSettings.isAllowedMobEntity(true, true, false), "bow defense still excludes players");
+        assertFalse(KillAuraCompanionSettings.isAllowedMobEntity(true, false, true), "bow defense still excludes endermen");
+        assertFalse(KillAuraCompanionSettings.isAllowedMobEntity(false, false, false), "bow defense still excludes unattackable entities");
+        assertTrue(KillAuraCompanionSettings.isAllowedMobEntity(true, false, false), "bow defense allows attackable non-player non-enderman mobs");
+        assertTrue(KillAuraCompanionSettings.isAggroedOnBot(true, null, botUuid), "bow defense accepts mobs currently targeting the bot");
+        assertTrue(KillAuraCompanionSettings.isAggroedOnBot(false, botUuid, botUuid), "bow defense accepts angerable mobs angry at the bot");
+        assertFalse(KillAuraCompanionSettings.isAggroedOnBot(false, otherUuid, botUuid), "bow defense rejects mobs angry at someone else");
+        assertFalse(KillAuraCompanionSettings.isAggroedOnBot(false, null, botUuid), "bow defense rejects mobs with no bot aggro");
+        assertTrue(PlaneBowTargeting.meleePrepPolicy(4.5, true), "melee prep runs for close aggroed threats");
+        assertFalse(PlaneBowTargeting.meleePrepPolicy(4.6, true), "melee prep ignores threats outside KillAura range");
+        assertFalse(PlaneBowTargeting.meleePrepPolicy(4.0, false), "melee prep requires bot aggro");
+        assertFalse(PlaneBowTargeting.bowTargetPolicy(4.5, 20.0, true, true), "bow defense leaves melee-range threats to KillAura");
+        assertTrue(PlaneBowTargeting.bowTargetPolicy(4.6, 20.0, true, true), "bow defense accepts aggroed threats outside melee range");
+        assertFalse(PlaneBowTargeting.bowTargetPolicy(5.9, 20.0, true, false), "bow fallback waits for spacing before missing-aggro targets");
+        assertTrue(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, true, false), "bow fallback accepts visible missing-aggro targets at spacing threshold");
+        assertFalse(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, false, true), "bow defense still requires visibility");
+        assertFalse(PlaneBowTargeting.bowTargetPolicy(21.0, 20.0, true, true), "bow defense respects configured range");
     }
 
     private static boolean[] hotbarEmpties(int... emptySlots) {

@@ -8,7 +8,7 @@ This is the fast setup for running `plane-builder` on 6b6t. Bring backups, expec
 - Java `21`
 - Fabric Loader
 - Meteor Client
-- Baritone for Meteor
+- Baritone for Minecraft `1.21.8`, either Baritone for Meteor or the normal Baritone release
 - WMBot installed as a Meteor addon
 
 Install WMBot one of two ways:
@@ -20,7 +20,7 @@ Install WMBot one of two ways:
 ./gradlew build
 ```
 
-Put the WMBot jar and the Baritone for Meteor jar in your Minecraft `mods` folder. Meteor Client should be in that same folder too.
+Put the WMBot jar and exactly one compatible Baritone jar in your Minecraft `mods` folder. Meteor Client should be in that same folder too.
 
 If you build from source, use the remapped WMBot jar from `build/libs`.
 
@@ -128,7 +128,7 @@ This lets the bot use guarded bow behavior while idle or in safe replenish phase
 
 ## If It Acts Weird
 
-- No movement: make sure Baritone for Meteor is installed and `auto-walk` is enabled.
+- No movement: make sure one compatible Baritone jar is installed and `auto-walk` is enabled.
 - No flight: make sure `auto-elytra-fly` is enabled and an elytra is available.
 - No refill: check `kitbot-nickname`, `kitbot-kit-name`, and whether the kitbot is actually available.
 - No eating: make sure Meteor Auto Eat exists, `auto-eat` is enabled in companion modules, and you have golden apples.

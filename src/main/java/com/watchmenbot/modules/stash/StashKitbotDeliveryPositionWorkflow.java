@@ -48,6 +48,7 @@ final class StashKitbotDeliveryPositionWorkflow {
         AbstractClientPlayerEntity requester = findDeliveryTarget(request, settings);
         if (startMovingToDeliverySpot(request, requester, settings)) return;
 
+        trackDeliveryMovement(request, null, null);
         delivery.stopWalking();
         navigator.stop();
         logCrossDimensionWait(request, settings, "reacquire_requester");
@@ -127,6 +128,9 @@ final class StashKitbotDeliveryPositionWorkflow {
             delivery.walkAwayFrom(requester);
         }
         else if (decision == StashKitbotDeliveryPlanner.DeliveryPositionDecision.PATH_TO_SPOT) {
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision stuckDecision = tickDeliveryMovementWatchdog(request, requester, spot, settings);
+            if (handleStuckDecision(request, stuckDecision, settings, "delivery positioning")) return;
+
             request.delivery.directStepTicks = 0;
             delivery.stopWalking();
             navigator.ensureReturnTo(spot);
@@ -146,6 +150,8 @@ final class StashKitbotDeliveryPositionWorkflow {
         request.delivery.directStepTicks = 0;
         request.delivery.positioningTicks = 0;
         request.delivery.deliveryTraceTicks = 0;
+        request.delivery.stuckRecoveryAttempts = 0;
+        resetDeliveryMovementWatchdog(request);
         request.delivery.deliverySpot = delivery.deliverySpot(requester, settings.deliveryDistance());
         session.phase(KitbotPhase.MOVE_TO_DELIVERY_SPOT);
         return true;
@@ -238,6 +244,9 @@ final class StashKitbotDeliveryPositionWorkflow {
         }
 
         if (decision == StashKitbotDeliveryPlanner.CrossDimensionDeliveryDecision.DIRECT_STEP_AWAY) {
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision stuckDecision = tickDeliveryMovementWatchdog(request, requester, null, settings);
+            if (handleStuckDecision(request, stuckDecision, settings, "cross-dimension direct step")) return;
+
             navigator.stop();
             request.delivery.directStepTicks++;
             delivery.walkAwayFrom(requester);
@@ -245,6 +254,9 @@ final class StashKitbotDeliveryPositionWorkflow {
         }
 
         if (decision == StashKitbotDeliveryPlanner.CrossDimensionDeliveryDecision.APPROACH_REQUESTER) {
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision stuckDecision = tickDeliveryMovementWatchdog(request, requester, null, settings);
+            if (handleStuckDecision(request, stuckDecision, settings, "cross-dimension approach")) return;
+
             navigator.stop();
             request.delivery.directStepTicks = 0;
             delivery.walkToward(requester);
@@ -254,6 +266,136 @@ final class StashKitbotDeliveryPositionWorkflow {
         request.delivery.directStepTicks = 0;
         delivery.stopWalking();
         callbacks.postTeleportFailure("I found you after teleporting, but could not get into delivery range. Heading home with the kits.");
+    }
+
+    private StashKitbotDeliveryPlanner.DeliveryStuckDecision tickDeliveryMovementWatchdog(
+        KitRequest request,
+        AbstractClientPlayerEntity requester,
+        BlockPos spot,
+        StashKitbotDeliveryWorkflow.Settings settings
+    ) {
+        boolean progressed = trackDeliveryMovement(request, requester, spot);
+        if (progressed) {
+            request.delivery.stuckMovementTicks = 0;
+            return StashKitbotDeliveryPlanner.DeliveryStuckDecision.TRACK;
+        }
+
+        request.delivery.stuckMovementTicks++;
+        return StashKitbotDeliveryPlanner.deliveryStuckDecision(
+            false,
+            request.delivery.stuckMovementTicks,
+            StashKitbotDeliveryPlanner.DELIVERY_STUCK_TICKS,
+            request.delivery.stuckRecoveryAttempts,
+            requester != null
+        );
+    }
+
+    private boolean handleStuckDecision(
+        KitRequest request,
+        StashKitbotDeliveryPlanner.DeliveryStuckDecision decision,
+        StashKitbotDeliveryWorkflow.Settings settings,
+        String context
+    ) {
+        if (decision == StashKitbotDeliveryPlanner.DeliveryStuckDecision.TRACK) return false;
+
+        delivery.stopWalking();
+        navigator.stop();
+        request.delivery.stuckMovementTicks = 0;
+        resetDeliveryMovementWatchdog(request);
+
+        if (decision == StashKitbotDeliveryPlanner.DeliveryStuckDecision.RESET_MOVEMENT) {
+            request.delivery.stuckRecoveryAttempts++;
+            request.delivery.directStepTicks = 0;
+            request.delivery.positioningTicks = 0;
+            traceStuckRecovery(settings, "reset", context, request);
+            return false;
+        }
+
+        request.delivery.stuckRecoveryAttempts = 0;
+        if (decision == StashKitbotDeliveryPlanner.DeliveryStuckDecision.THROW_NOW) {
+            request.delivery.directStepTicks = 0;
+            request.delivery.positioningTicks = 0;
+            request.delivery.throwDelay.reset(0);
+            request.delivery.deliveryTimeout.reset(settings.deliveryTimeoutTicks());
+            session.phase(KitbotPhase.THROWING);
+            traceStuckRecovery(settings, "throw", context, request);
+            events.info("Delivery movement appeared stuck after teleport; throwing %d '%s' shulkers to %s from the current position.",
+                request.gather.gathered,
+                request.kitName,
+                request.requester
+            );
+            return true;
+        }
+
+        beginRequesterReacquire(settings);
+        traceStuckRecovery(settings, "reacquire", context, request);
+        return true;
+    }
+
+    private boolean trackDeliveryMovement(KitRequest request, AbstractClientPlayerEntity requester, BlockPos spot) {
+        if (mc.player == null) return true;
+
+        BlockPos currentPos = mc.player.getBlockPos().toImmutable();
+        double currentX = mc.player.getX();
+        double currentZ = mc.player.getZ();
+        double currentRequesterDistanceSq = requester == null ? Double.MAX_VALUE : delivery.horizontalDistanceSq(requester);
+        BlockPos currentSpot = spot == null ? null : spot.toImmutable();
+        boolean progressed = false;
+
+        if (!Double.isNaN(request.delivery.lastMovementWatchdogX) && !Double.isNaN(request.delivery.lastMovementWatchdogZ)) {
+            double movementSq = horizontalDistanceSq(
+                currentX,
+                currentZ,
+                request.delivery.lastMovementWatchdogX,
+                request.delivery.lastMovementWatchdogZ
+            );
+            double requesterDistanceImprovementSq = request.delivery.lastMovementWatchdogRequesterDistanceSq - currentRequesterDistanceSq;
+            boolean spotChanged = !sameBlockPos(currentSpot, request.delivery.lastMovementWatchdogSpot);
+            progressed = StashKitbotDeliveryPlanner.deliveryMovementProgressed(movementSq, requesterDistanceImprovementSq, spotChanged);
+        }
+
+        request.delivery.lastMovementWatchdogPos = currentPos;
+        request.delivery.lastMovementWatchdogX = currentX;
+        request.delivery.lastMovementWatchdogZ = currentZ;
+        request.delivery.lastMovementWatchdogRequesterDistanceSq = currentRequesterDistanceSq;
+        request.delivery.lastMovementWatchdogSpot = currentSpot;
+        return progressed;
+    }
+
+    private void resetDeliveryMovementWatchdog(KitRequest request) {
+        request.delivery.stuckMovementTicks = 0;
+        request.delivery.lastMovementWatchdogPos = null;
+        request.delivery.lastMovementWatchdogX = Double.NaN;
+        request.delivery.lastMovementWatchdogZ = Double.NaN;
+        request.delivery.lastMovementWatchdogRequesterDistanceSq = Double.MAX_VALUE;
+        request.delivery.lastMovementWatchdogSpot = null;
+    }
+
+    private double horizontalDistanceSq(double ax, double az, double bx, double bz) {
+        double dx = ax - bx;
+        double dz = az - bz;
+        return dx * dx + dz * dz;
+    }
+
+    private boolean sameBlockPos(BlockPos a, BlockPos b) {
+        if (a == null || b == null) return a == b;
+        return a.equals(b);
+    }
+
+    private void traceStuckRecovery(
+        StashKitbotDeliveryWorkflow.Settings settings,
+        String action,
+        String context,
+        KitRequest request
+    ) {
+        if (!settings.traceLogs()) return;
+
+        events.info("[kitbot trace] delivery movement watchdog action=%s context=%s phase=%s requester=%s.",
+            action,
+            context,
+            session.phase().name().toLowerCase(),
+            request.requester
+        );
     }
 
     private boolean isCrossDimensionDeliveryContext(KitRequest request) {

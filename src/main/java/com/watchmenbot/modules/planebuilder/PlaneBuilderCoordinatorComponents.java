@@ -11,6 +11,7 @@ record PlaneBuilderCoordinatorComponents(
     PlaneHoleEscapeController holeEscape,
     PlaneBuildLoop buildLoop,
     PlaneReplenishWorkflow replenish,
+    PlaneMeleeDefenseWorkflow meleeDefense,
     PlaneBowDefenseWorkflow bowDefense,
     PlaneEndermanLookSafety endermanLookSafety
 ) {
@@ -38,6 +39,7 @@ record PlaneBuilderCoordinatorComponents(
         PlaneAutoWalkController autoWalk = new PlaneAutoWalkController(autoWalkSettings, config, endermanLookSafety, autoElytraScanner);
         PlaneHoleEscapeController holeEscape = new PlaneHoleEscapeController(holeEscapeSettings, config, world);
         PlaneBuildLoop buildLoop = new PlaneBuildLoop(inventory, scanner, placement, stats, autoWalk, config);
+        PlaneMeleeDefenseWorkflow meleeDefense = new PlaneMeleeDefenseWorkflow(guards, inventory);
         PlaneReplenishWorkflow replenish = new PlaneReplenishWorkflow(
             inventory,
             placement,
@@ -51,7 +53,14 @@ record PlaneBuilderCoordinatorComponents(
             endermanLookSafety,
             logger
         );
-        PlaneBowDefenseWorkflow bowDefense = new PlaneBowDefenseWorkflow(bowDefenseSettings, guards, inventory);
+        PlaneBowDefenseWorkflow bowDefense = new PlaneBowDefenseWorkflow(
+            bowDefenseSettings,
+            guards,
+            inventory,
+            config,
+            endermanLookSafety,
+            logger
+        );
 
         return new PlaneBuilderCoordinatorComponents(
             context,
@@ -62,6 +71,7 @@ record PlaneBuilderCoordinatorComponents(
             holeEscape,
             buildLoop,
             replenish,
+            meleeDefense,
             bowDefense,
             endermanLookSafety
         );

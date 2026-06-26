@@ -36,6 +36,70 @@ final class PlaneInventoryView {
         return capacityMatching(this::isBuildBlockStack, config.buildBlock().asItem().getDefaultStack().getMaxCount());
     }
 
+    int safeBuildBlockCapacity() {
+        return safeBuildBlockCapacity(false);
+    }
+
+    int safeBuildBlockCapacity(boolean reserveManagedShulkerSlot) {
+        int buildBlockMaxCount = config.buildBlock().asItem().getDefaultStack().getMaxCount();
+        int currentBuildBlocks = 0;
+        int partialBuildBlockRoom = 0;
+        int emptyInventorySlots = 0;
+        int looseEnderChests = 0;
+        boolean hasPartialLooseEnderChestStack = false;
+        EnderChestShulkerSourceScan shulkerScan = scanEnderChestShulkerSources();
+
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 0; slot < inventorySlots; slot++) {
+            ItemStack stack = context.player().getInventory().getStack(slot);
+            if (stack.isEmpty()) {
+                emptyInventorySlots++;
+            }
+            else if (isBuildBlockStack(stack)) {
+                currentBuildBlocks += stack.getCount();
+                partialBuildBlockRoom += Math.max(0, stack.getMaxCount() - stack.getCount());
+            }
+            else if (stack.isOf(Items.ENDER_CHEST)) {
+                looseEnderChests += stack.getCount();
+                hasPartialLooseEnderChestStack = hasPartialLooseEnderChestStack || stack.getCount() < stack.getMaxCount();
+            }
+        }
+
+        ItemStack offhand = context.player().getOffHandStack();
+        if (isBuildBlockStack(offhand)) {
+            currentBuildBlocks += offhand.getCount();
+            partialBuildBlockRoom += Math.max(0, offhand.getMaxCount() - offhand.getCount());
+        }
+        else if (offhand.isOf(Items.ENDER_CHEST)) {
+            looseEnderChests += offhand.getCount();
+            hasPartialLooseEnderChestStack = hasPartialLooseEnderChestStack || offhand.getCount() < offhand.getMaxCount();
+        }
+
+        int capacityWithoutShulkerReservation = PlaneReplenishTargetPolicy.safeBuildBlockCapacity(
+            currentBuildBlocks,
+            partialBuildBlockRoom,
+            emptyInventorySlots,
+            buildBlockMaxCount,
+            hasPartialLooseEnderChestStack,
+            false,
+            true,
+            reserveManagedShulkerSlot
+        );
+        boolean shulkerSourceMayBeNeeded = shulkerScan.hasVisibleSource()
+            && currentBuildBlocks + looseEnderChests * EnderChestFarmProgress.OBSIDIAN_PER_ENDER_CHEST < capacityWithoutShulkerReservation;
+
+        return PlaneReplenishTargetPolicy.safeBuildBlockCapacity(
+            currentBuildBlocks,
+            partialBuildBlockRoom,
+            emptyInventorySlots,
+            buildBlockMaxCount,
+            hasPartialLooseEnderChestStack,
+            shulkerSourceMayBeNeeded,
+            true,
+            reserveManagedShulkerSlot
+        );
+    }
+
     int countLooseEnderChests() {
         return countMatching(stack -> stack.isOf(Items.ENDER_CHEST));
     }
@@ -62,6 +126,31 @@ final class PlaneInventoryView {
 
     boolean hasInventorySpaceForEnderChest() {
         return anyMatching(stack -> stack.isEmpty() || (stack.isOf(Items.ENDER_CHEST) && stack.getCount() < stack.getMaxCount()));
+    }
+
+    boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+        int emptySlots = 0;
+        boolean partialEnderChestStack = false;
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 0; slot < inventorySlots; slot++) {
+            ItemStack stack = context.player().getInventory().getStack(slot);
+            if (stack.isEmpty()) {
+                emptySlots++;
+            }
+            else if (stack.isOf(Items.ENDER_CHEST) && stack.getCount() < stack.getMaxCount()) {
+                partialEnderChestStack = true;
+            }
+        }
+
+        ItemStack offhand = context.player().getOffHandStack();
+        if (offhand.isEmpty()) {
+            emptySlots++;
+        }
+        else if (offhand.isOf(Items.ENDER_CHEST) && offhand.getCount() < offhand.getMaxCount()) {
+            partialEnderChestStack = true;
+        }
+
+        return PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(partialEnderChestStack, emptySlots);
     }
 
     boolean hasInventorySpaceForCleanupDrop(ItemStack dropStack) {
@@ -176,6 +265,15 @@ final class PlaneInventoryView {
         return -1;
     }
 
+    int findMainInventorySwordSlot() {
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 9; slot < inventorySlots; slot++) {
+            if (isUsableSwordStack(context.player().getInventory().getStack(slot))) return slot;
+        }
+
+        return -1;
+    }
+
     int findTrashSlot() {
         int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
         for (int slot = 0; slot < inventorySlots; slot++) {
@@ -217,6 +315,10 @@ final class PlaneInventoryView {
 
     boolean isUsableBowStack(ItemStack stack) {
         return PlaneItemClassifier.isUsableBowStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
+    }
+
+    boolean isUsableSwordStack(ItemStack stack) {
+        return PlaneItemClassifier.isUsableSwordStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
     }
 
     int countEnderChestsInShulker(ItemStack stack) {

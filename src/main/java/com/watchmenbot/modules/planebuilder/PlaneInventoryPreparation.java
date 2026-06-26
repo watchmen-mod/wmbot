@@ -73,6 +73,20 @@ final class PlaneInventoryPreparation {
         return bowPreparation(result, false, true, inventory.findHotbarBow());
     }
 
+    FindItemResult prepareUsableSword() {
+        FindItemResult result = inventory.findHotbarSword();
+        if (result != null && result.isHotbar()) {
+            return swordPreparation(result, true, false, result);
+        }
+
+        if (inventory.findMainInventorySwordSlot() < 0) {
+            return swordPreparation(result, false, false, result);
+        }
+
+        mover.ensureSwordInHotbar();
+        return swordPreparation(result, false, true, inventory.findHotbarSword());
+    }
+
     static BuildBlockPreparation buildBlockPreparation(
         FindItemResult hotbarResult,
         boolean alreadyUsable,
@@ -98,6 +112,18 @@ final class PlaneInventoryPreparation {
     }
 
     static FindItemResult bowPreparation(
+        FindItemResult hotbarResult,
+        boolean alreadyUsable,
+        boolean mainInventorySourceFound,
+        FindItemResult promotedResult
+    ) {
+        if (alreadyUsable) return hotbarResult;
+        if (!mainInventorySourceFound) return hotbarResult;
+
+        return promotedResult;
+    }
+
+    static FindItemResult swordPreparation(
         FindItemResult hotbarResult,
         boolean alreadyUsable,
         boolean mainInventorySourceFound,

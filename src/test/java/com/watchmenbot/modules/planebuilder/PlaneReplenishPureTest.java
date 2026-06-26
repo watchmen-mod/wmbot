@@ -1,5 +1,9 @@
 package com.watchmenbot.modules.planebuilder;
 
+import meteordevelopment.meteorclient.utils.player.FindItemResult;
+import net.minecraft.block.Block;
+import net.minecraft.item.ItemStack;
+import net.minecraft.screen.ScreenHandler;
 import net.minecraft.util.math.BlockPos;
 
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertEquals;
@@ -14,6 +18,8 @@ final class PlaneReplenishPureTest {
         computesRequiredEnderChestsForReplenishTarget();
         computesAdditionalEnderChestsForReplenishTarget();
         clampsEffectiveReplenishTarget();
+        computesSafeReplenishTargetPolicy();
+        sharesSafeReplenishTargetAcrossWorkflows();
         tracksPendingEnderChestFarmProgress();
         PlaneReplenishManagedShulkerPureTest.run();
         classifiesServiceHoleStatuses();
@@ -27,6 +33,7 @@ final class PlaneReplenishPureTest {
         PlaneReplenishCleanupPureTest.run();
         plansServiceHoleReadiness();
         plansMissingObsidianRecovery();
+        plansMissingPickaxeRecovery();
         tracksReplenishActivePhases();
         tracksPhasePolicy();
         preservesActiveReplenishWhileKitbotRefillIsPending();
@@ -71,6 +78,88 @@ final class PlaneReplenishPureTest {
         );
     }
 
+    private static void computesSafeReplenishTargetPolicy() {
+        assertEquals(
+            128,
+            PlaneReplenishTargetPolicy.effectiveTarget(128, false, 32, 256, 384),
+            "toggle disabled preserves configured target"
+        );
+        assertEquals(
+            192,
+            PlaneReplenishTargetPolicy.effectiveTarget(512, false, 32, 192, 384),
+            "toggle disabled preserves existing capacity clamp"
+        );
+        assertEquals(
+            384,
+            PlaneReplenishTargetPolicy.effectiveTarget(128, true, 32, 256, 384),
+            "toggle enabled ignores configured target and uses safe capacity"
+        );
+        assertEquals(
+            32,
+            PlaneReplenishTargetPolicy.effectiveTarget(128, true, 32, 256, 16),
+            "safe target never drops below replenish minimum"
+        );
+        assertEquals(
+            128,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 64, 1, 64, true, false, false),
+            "partial obsidian stack room is counted before empty slots"
+        );
+        assertEquals(
+            192,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 2, 64, true, false, false),
+            "empty inventory slots count as loose obsidian capacity"
+        );
+        assertEquals(
+            128,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 2, 64, false, false, false),
+            "missing partial ender chest stack reserves one empty slot"
+        );
+        assertEquals(
+            64,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 2, 64, false, true, true),
+            "dynamic reservations reduce fillable empty slots"
+        );
+        assertEquals(
+            64,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 3, 64, false, true, true, true),
+            "managed shulker return reserves an additional empty slot"
+        );
+        assertEquals(
+            64,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 0, 64, true, false, false),
+            "occupied non-obsidian slots do not add capacity"
+        );
+    }
+
+    private static void sharesSafeReplenishTargetAcrossWorkflows() {
+        RecordingTargetInventory inventory = new RecordingTargetInventory(96, 160, 80);
+
+        int manualTarget = PlaneReplenishTargets.effectiveTarget(inventory, 128, false);
+        assertEquals(96, manualTarget, "shared target uses manual inventory clamp when toggle is disabled");
+        assertFalse(inventory.lastUseAvailableSafeInventorySpace, "manual target passes disabled toggle to inventory");
+
+        int safeTarget = PlaneReplenishTargets.effectiveTarget(inventory, 128, true);
+        assertEquals(160, safeTarget, "shared target uses safe inventory capacity when toggle is enabled");
+        assertTrue(inventory.lastUseAvailableSafeInventorySpace, "safe target passes enabled toggle to inventory");
+
+        EnderChestFarmProgress farmProgress = new EnderChestFarmProgress();
+        assertEquals(
+            Phase.CLOSING_SERVICE_HOLE,
+            PlaneReplenishDecisions.sourcePhase(safeTarget, safeTarget, 0),
+            "ender chest farming stops when safe-capacity target is reached"
+        );
+        assertEquals(
+            5,
+            farmProgress.additionalEnderChestsNeeded(120, safeTarget),
+            "shulker extraction requests only enough ender chests for the shared safe target"
+        );
+        assertEquals(
+            10,
+            inventory.requiredEnderChestsForTarget(safeTarget),
+            "kitbot refill supply calculation uses the same shared safe target"
+        );
+    }
+
     private static void tracksPendingEnderChestFarmProgress() {
         EnderChestFarmProgress progress = new EnderChestFarmProgress();
         progress.recordFarmedEnderChest(64);
@@ -84,6 +173,8 @@ final class PlaneReplenishPureTest {
         assertEquals(80, progress.effectiveBuildBlocks(72), "picked up obsidian replaces matching pending obsidian without losing effective progress");
         assertEquals(8, progress.pendingFarmedObsidian(), "inventory pickup reconciles pending obsidian downward");
         assertEquals(1, progress.additionalEnderChestsNeeded(72, 88), "pending obsidian reduces shulker extraction need");
+        assertEquals(1, progress.safeAdditionalEnderChestsNeeded(72, 88, 0), "safe extraction allows one full ender chest when eight obsidian fits");
+        assertFalse(progress.canFitAdditionalEnderChest(72, 87, 0), "safe extraction refuses another ender chest when only seven obsidian fit");
 
         progress.recordFarmedEnderChest(72);
         assertEquals(0, progress.additionalEnderChestsNeeded(72, 88), "pending obsidian can fully cover target shortfall");
@@ -96,6 +187,8 @@ final class PlaneReplenishPureTest {
         progress.reset();
         assertEquals(0, progress.pendingFarmedObsidian(), "reset clears pending farm progress");
         assertEquals(64, progress.effectiveBuildBlocks(64), "reset returns effective blocks to inventory count");
+        assertEquals(80, progress.effectiveBuildBlocks(64, 16), "visible dropped obsidian restores effective progress after reset");
+        assertEquals(0, progress.safeAdditionalEnderChestsNeeded(64, 87, 16), "visible dropped obsidian prevents farming into partial remaining room");
     }
 
     private static void classifiesServiceHoleStatuses() {
@@ -113,6 +206,11 @@ final class PlaneReplenishPureTest {
             ServiceHoleContext.Status.READY_BUILD_BLOCK,
             ServiceHoleContext.statusFor(true, true, ServiceHoleContext.HoleBlock.BUILD_BLOCK),
             "supported build block is ready"
+        );
+        assertEquals(
+            ServiceHoleContext.Status.READY_BREAKABLE_CAP,
+            ServiceHoleContext.statusFor(true, true, ServiceHoleContext.HoleBlock.BREAKABLE_CAP),
+            "supported breakable cap is ready to open"
         );
         assertEquals(
             ServiceHoleContext.Status.READY_REPLACEABLE,
@@ -136,8 +234,10 @@ final class PlaneReplenishPureTest {
         );
 
         assertTrue(ServiceHoleContext.Status.READY_REPLACEABLE.readyForWorkflow(), "ready status allows workflow");
+        assertTrue(ServiceHoleContext.Status.READY_BREAKABLE_CAP.readyForWorkflow(), "breakable cap allows opening workflow");
         assertTrue(ServiceHoleContext.Status.READY_ENDER_CHEST.openForReplenish(), "ender chest status is open for replenish");
         assertFalse(ServiceHoleContext.Status.READY_BUILD_BLOCK.openForReplenish(), "build block must be opened before replenish");
+        assertFalse(ServiceHoleContext.Status.READY_BREAKABLE_CAP.openForReplenish(), "breakable cap must be opened before replenish");
         assertFalse(ServiceHoleContext.Status.INVALID_SUPPORT.readyForWorkflow(), "invalid support blocks workflow");
     }
 
@@ -320,6 +420,11 @@ final class PlaneReplenishPureTest {
             "ready service hole has no unavailable phase"
         );
         assertEquals(
+            null,
+            PlaneReplenishDecisions.serviceHoleReadyPhase(ServiceHoleContext.Status.READY_BREAKABLE_CAP),
+            "breakable capped service hole can proceed to opening"
+        );
+        assertEquals(
             Phase.SERVICE_HOLE_BLOCKED,
             PlaneReplenishDecisions.serviceHoleReadyPhase(ServiceHoleContext.Status.BLOCKED),
             "blocked service hole stops workflow"
@@ -354,6 +459,29 @@ final class PlaneReplenishPureTest {
         );
     }
 
+    private static void plansMissingPickaxeRecovery() {
+        assertEquals(
+            Phase.MISSING_PICKAXE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(null, Phase.BREAKING_ENDER_CHEST),
+            "missing usable pickaxe keeps missing pickaxe recovery active"
+        );
+        assertEquals(
+            Phase.MISSING_PICKAXE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(10, 1), Phase.OPENING_SERVICE_HOLE),
+            "non-hotbar pickaxe lookup keeps missing pickaxe recovery active"
+        );
+        assertEquals(
+            Phase.BREAKING_ENDER_CHEST_SHULKER,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(2, 1), Phase.BREAKING_ENDER_CHEST_SHULKER),
+            "usable hotbar pickaxe restores the recorded break phase"
+        );
+        assertEquals(
+            Phase.SELECTING_SERVICE_HOLE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(2, 1), null),
+            "usable hotbar pickaxe without a recorded origin restarts service-hole selection"
+        );
+    }
+
     private static void tracksReplenishActivePhases() {
         assertFalse(PlaneReplenishDecisions.active(Phase.IDLE, false), "idle is not active");
         assertTrue(PlaneReplenishDecisions.active(Phase.SELECTING_SERVICE_HOLE, false), "selecting service hole is active");
@@ -373,7 +501,7 @@ final class PlaneReplenishPureTest {
         assertTrue(PlanePhasePolicy.replenishActive(Phase.MISSING_OBSIDIAN, true), "policy treats missing obsidian active after service-hole selection");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.MISSING_OBSIDIAN), "policy keeps bow defense during missing obsidian recovery");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SELECTING_SERVICE_HOLE), "policy keeps bow defense during service-hole selection");
-        assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_OPEN), "policy keeps bow defense while service hole is open");
+        assertFalse(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_OPEN), "policy keeps replenish ownership during the service-hole-open bridge");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SELECTING_REPLENISH_SOURCE), "policy keeps bow defense during passive source selection");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_BLOCKED), "policy keeps bow defense during blocked service-hole wait");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.MISSING_ENDER_CHEST), "policy keeps bow defense during missing ender chest wait");
@@ -421,6 +549,198 @@ final class PlaneReplenishPureTest {
             PlaneReplenishWorkflow.pendingKitbotRefillOwnsPhase(Phase.PICKING_UP_KITBOT_REFILL),
             "pending kitbot refill allows confirmed delivery pickup"
         );
+    }
+
+    private static final class RecordingTargetInventory implements PlaneInventoryAccess {
+        private final int manualTarget;
+        private final int safeTarget;
+        private final int currentBuildBlocks;
+        private boolean lastUseAvailableSafeInventorySpace;
+
+        private RecordingTargetInventory(int manualTarget, int safeTarget, int currentBuildBlocks) {
+            this.manualTarget = manualTarget;
+            this.safeTarget = safeTarget;
+            this.currentBuildBlocks = currentBuildBlocks;
+        }
+
+        @Override
+        public int countBuildBlock() {
+            return currentBuildBlocks;
+        }
+
+        @Override
+        public int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace) {
+            return effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace, false);
+        }
+
+        @Override
+        public int effectiveReplenishTarget(
+            int configuredTarget,
+            boolean useAvailableSafeInventorySpace,
+            boolean reserveManagedShulkerSlot
+        ) {
+            lastUseAvailableSafeInventorySpace = useAvailableSafeInventorySpace;
+            return useAvailableSafeInventorySpace ? safeTarget : manualTarget;
+        }
+
+        @Override
+        public int requiredEnderChestsForTarget(int targetBuildBlocks) {
+            return PlaneInventoryQueries.requiredEnderChestsForTarget(currentBuildBlocks, targetBuildBlocks);
+        }
+
+        @Override
+        public int countLooseEnderChests() {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean hasInventorySpaceForEnderChest() {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findHotbarBuildBlock() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findEnderChest() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findHotbarBow() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult prepareUsableBow() {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean hasArrows() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findEnderChestShulkerInHotbar() {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean hasEnderChestShulkerInMainInventory() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventoryBuildBlockSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventoryEnderChestShulkerSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventoryPickaxeSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventoryBowSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventorySwordSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean hasAnyEnderChestShulker() {
+            throw unsupported();
+        }
+
+        @Override
+        public EnderChestShulkerSourceScan scanEnderChestShulkerSources() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findOpenShulkerEnderChestSlot(ScreenHandler handler) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean findResultMatchesBuildBlock(FindItemResult result) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean findResultMatchesEnderChestShulker(FindItemResult result) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean findResultMatchesBlock(FindItemResult result, Block block) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean isBuildBlockStack(ItemStack stack) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean isBlockStack(ItemStack stack, Block block) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean isShulkerWithEnderChests(ItemStack stack) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean isShulkerBoxStack(ItemStack stack) {
+            throw unsupported();
+        }
+
+        @Override
+        public boolean isEnderChestSupplyStack(ItemStack stack) {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findHotbarPickaxe() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult prepareUsablePickaxe() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findHotbarSword() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult prepareUsableSword() {
+            throw unsupported();
+        }
+
+        private UnsupportedOperationException unsupported() {
+            return new UnsupportedOperationException("unused test inventory method");
+        }
     }
 
 }

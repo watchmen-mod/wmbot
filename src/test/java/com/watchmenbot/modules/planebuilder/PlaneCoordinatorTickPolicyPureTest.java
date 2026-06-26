@@ -93,6 +93,10 @@ final class PlaneCoordinatorTickPolicyPureTest {
             PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(Phase.PLACING_ENDER_CHEST, true, false),
             "active bow defense does not preempt ender chest placement"
         );
+        assertFalse(
+            PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(Phase.SERVICE_HOLE_OPEN, true, false),
+            "active bow defense does not preempt the service-hole-open bridge phase"
+        );
         assertTrue(
             PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(Phase.BREAKING_ENDER_CHEST, false, true),
             "active item use preempts replenish so Auto Eat can finish"
@@ -160,6 +164,10 @@ final class PlaneCoordinatorTickPolicyPureTest {
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.MOVING_TO_TRASH_EDGE),
             "trash edge movement allows hole escape before direct walking"
         );
+        assertTrue(
+            PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.SERVICE_HOLE_BLOCKED),
+            "blocked service-hole recovery allows hole escape before retrying replenish"
+        );
         assertFalse(
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.PLACING_ENDER_CHEST),
             "ender chest farming does not release replenish for hole escape"
@@ -177,7 +185,6 @@ final class PlaneCoordinatorTickPolicyPureTest {
     private static boolean passiveBowDefensePhase(Phase phase) {
         return phase == Phase.MISSING_OBSIDIAN
             || phase == Phase.SELECTING_SERVICE_HOLE
-            || phase == Phase.SERVICE_HOLE_OPEN
             || phase == Phase.SELECTING_REPLENISH_SOURCE
             || phase == Phase.SERVICE_HOLE_BLOCKED
             || phase == Phase.MISSING_ENDER_CHEST

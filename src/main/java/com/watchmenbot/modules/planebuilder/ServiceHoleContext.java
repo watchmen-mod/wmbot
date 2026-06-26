@@ -74,7 +74,7 @@ final class ServiceHoleContext {
     }
 
     boolean openableServiceHoleBlock() {
-        return selected() && scanner.isServiceHoleBlock(hole) && supportValid();
+        return selected() && (scanner.isServiceHoleBlock(hole) || scanner.isBreakableServiceHoleCap(hole)) && supportValid();
     }
 
     HoleBlock block() {
@@ -85,6 +85,7 @@ final class ServiceHoleContext {
         if (block == Blocks.ENDER_CHEST) return HoleBlock.ENDER_CHEST;
         if (block instanceof ShulkerBoxBlock) return HoleBlock.SHULKER;
         if (context.world().getBlockState(hole).isReplaceable()) return HoleBlock.REPLACEABLE;
+        if (scanner.isBreakableServiceHoleCap(hole)) return HoleBlock.BREAKABLE_CAP;
         return HoleBlock.BLOCKED;
     }
 
@@ -98,6 +99,7 @@ final class ServiceHoleContext {
 
         return switch (block) {
             case BUILD_BLOCK -> Status.READY_BUILD_BLOCK;
+            case BREAKABLE_CAP -> Status.READY_BREAKABLE_CAP;
             case REPLACEABLE -> Status.READY_REPLACEABLE;
             case ENDER_CHEST -> Status.READY_ENDER_CHEST;
             case SHULKER -> Status.READY_SHULKER;
@@ -109,6 +111,7 @@ final class ServiceHoleContext {
         MISSING,
         REPLACEABLE,
         BUILD_BLOCK,
+        BREAKABLE_CAP,
         ENDER_CHEST,
         SHULKER,
         BLOCKED
@@ -117,6 +120,7 @@ final class ServiceHoleContext {
     enum Status {
         MISSING,
         READY_BUILD_BLOCK,
+        READY_BREAKABLE_CAP,
         READY_REPLACEABLE,
         READY_ENDER_CHEST,
         READY_SHULKER,
@@ -125,7 +129,7 @@ final class ServiceHoleContext {
 
         boolean readyForWorkflow() {
             return switch (this) {
-                case READY_BUILD_BLOCK, READY_REPLACEABLE, READY_ENDER_CHEST, READY_SHULKER -> true;
+                case READY_BUILD_BLOCK, READY_BREAKABLE_CAP, READY_REPLACEABLE, READY_ENDER_CHEST, READY_SHULKER -> true;
                 default -> false;
             };
         }

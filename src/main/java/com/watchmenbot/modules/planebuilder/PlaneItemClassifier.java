@@ -70,6 +70,17 @@ final class PlaneItemClassifier {
         );
     }
 
+    static boolean isUsableSwordStack(ItemStack stack, int durabilityThresholdPercent) {
+        if (stack == null || stack.isEmpty()) return false;
+
+        return isUsableSword(
+            stack.isIn(ItemTags.SWORDS),
+            stack.getMaxDamage(),
+            stack.getDamage(),
+            durabilityThresholdPercent
+        );
+    }
+
     static boolean isUsableElytraStack(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
 
@@ -100,6 +111,17 @@ final class PlaneItemClassifier {
         int durabilityThresholdPercent
     ) {
         return bow
+            && maxDamage > 0
+            && remainingDurabilityPercent(maxDamage, damage) >= durabilityThresholdPercent;
+    }
+
+    static boolean isUsableSword(
+        boolean sword,
+        int maxDamage,
+        int damage,
+        int durabilityThresholdPercent
+    ) {
+        return sword
             && maxDamage > 0
             && remainingDurabilityPercent(maxDamage, damage) >= durabilityThresholdPercent;
     }

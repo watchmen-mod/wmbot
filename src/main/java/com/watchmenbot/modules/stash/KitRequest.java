@@ -58,6 +58,8 @@ final class DeliveryState {
     int directStepTicks;
     int positioningTicks;
     int deliveryTraceTicks;
+    int stuckMovementTicks;
+    int stuckRecoveryAttempts;
     boolean crossDimensionDelivery;
     boolean homeRespawnRequired;
     boolean homeRespawnRequested;
@@ -65,6 +67,11 @@ final class DeliveryState {
     BlockPos preTpaPos;
     String preTpaDimension;
     BlockPos deliverySpot;
+    BlockPos lastMovementWatchdogPos;
+    BlockPos lastMovementWatchdogSpot;
+    double lastMovementWatchdogX = Double.NaN;
+    double lastMovementWatchdogZ = Double.NaN;
+    double lastMovementWatchdogRequesterDistanceSq = Double.MAX_VALUE;
 }
 
 final class PendingCommandCooldown {

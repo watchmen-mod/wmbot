@@ -91,6 +91,35 @@ final class PlaneKitbotRefillSupplyPureTest {
             workflow.missingSupplyPhase(Phase.MISSING_ENDER_CHEST_SHULKER, false),
             "cleared managed shulker allows normal kitbot path"
         );
+
+        boolean[] managedSupplyActive = {true};
+        PlaneKitbotRefillWorkflow requestWorkflow = new PlaneKitbotRefillWorkflow(
+            new PlaneKitbotMessenger(
+                () -> new PlaneKitbotRefillConfig(true, "KitBot", "echest", 1, "/w", "/tpy"),
+                sent::add,
+                () -> true
+            ),
+            null,
+            supply,
+            PlaneKitbotDroppedSupplyTrackers.none(),
+            null,
+            () -> 1,
+            () -> managedSupplyActive[0]
+        );
+        assertEquals(
+            Phase.MISSING_ENDER_CHEST_SHULKER,
+            requestWorkflow.afterServiceHoleClosed(),
+            "managed shulker suppresses the final kitbot request gate"
+        );
+        assertEquals(0, sent.size(), "managed shulker final gate does not send kitbot request");
+
+        managedSupplyActive[0] = false;
+        assertEquals(
+            Phase.WAITING_FOR_KITBOT_REFILL,
+            requestWorkflow.afterServiceHoleClosed(),
+            "cleared managed shulker allows request at the final gate"
+        );
+        assertEquals(1, sent.size(), "cleared managed shulker sends kitbot request");
     }
 
     private static void requestsKitbotWhenNoUsableSupplyExists() {

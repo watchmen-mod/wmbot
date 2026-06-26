@@ -34,7 +34,8 @@ final class PlaneCoordinatorTickPolicy {
     }
 
     static boolean shouldCheckHoleEscapeDuringReplenish(Phase phase) {
-        return phase == Phase.CLOSING_SERVICE_HOLE
+        return phase == Phase.SERVICE_HOLE_BLOCKED
+            || phase == Phase.CLOSING_SERVICE_HOLE
             || phase == Phase.CLOSING_SERVICE_HOLE_FOR_KITBOT_REFILL
             || phase == Phase.MOVING_TO_TRASH_EDGE;
     }

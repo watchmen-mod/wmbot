@@ -15,10 +15,13 @@ final class PlaneReplenishManagedShulkerPureTest {
         detectsConfirmedShulkerExtraction();
         tracksManagedEnderChestShulkerState();
         tracksManagedShulkerFailedOpenRecovery();
+        prioritizesManagedShulkerDropRecoveryAfterPartialExtraction();
         recoversFreshlyBrokenManagedShulkerDrop();
         recoversMissingEnderChestShulkerDrop();
+        waitsForInventorySpaceBeforeAbandoningShulkerDrop();
         timesOutStaleManagedShulkerRecoveryDrop();
         resetsManagedShulkerRecoveryTimeoutWhenTargetChanges();
+        usesLongShulkerRecoveryTimeout();
         classifiesEnderChestShulkerSources();
         debouncesMissingEnderChestShulkerSource();
         plansShulkerExtractionFallbacks();
@@ -71,14 +74,23 @@ final class PlaneReplenishManagedShulkerPureTest {
         assertTrue(state.placedAt(hole, ServiceHoleContext.Status.READY_SHULKER), "managed placed shulker is active in selected service hole");
         assertFalse(state.placedAt(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "replaceable hole is not placed shulker state");
         assertTrue(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_SHULKER), "managed placed shulker suppresses refill");
+        assertTrue(state.reservesInventorySlot(), "managed placed shulker reserves a return inventory slot");
 
         state.markPostBreakRecovery();
         assertFalse(state.placedAt(hole, ServiceHoleContext.Status.READY_SHULKER), "post-break recovery clears placed shulker block");
         assertTrue(state.postBreakRecovery(), "post-break recovery is tracked");
         assertTrue(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "post-break recovery suppresses refill");
+        assertTrue(state.reservesInventorySlot(), "post-break recovery keeps reserving the shulker return slot");
 
         state.clearPostBreakRecovery();
         assertFalse(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "cleared post-break recovery allows refill decisions");
+        assertFalse(state.reservesInventorySlot(), "cleared post-break recovery releases the reserved shulker slot");
+
+        state.markPlaced(hole);
+        state.markPostBreakRecovery();
+        state.markRecovered();
+        assertFalse(state.postBreakRecovery(), "recovered managed shulker clears post-break recovery");
+        assertFalse(state.reservesInventorySlot(), "recovered managed shulker releases inventory reservation");
     }
 
     private static void tracksManagedShulkerFailedOpenRecovery() {
@@ -98,6 +110,25 @@ final class PlaneReplenishManagedShulkerPureTest {
         opened.markPostBreakRecovery();
         assertFalse(opened.failedBeforeOpenRecovery(), "opened shulker recovery is not treated as failed-open");
         assertTrue(opened.openedOrExtracted(), "opened shulker records extraction progress");
+    }
+
+    private static void prioritizesManagedShulkerDropRecoveryAfterPartialExtraction() {
+        assertTrue(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 1, false),
+            "partial extraction keeps recovering the broken managed shulker drop"
+        );
+        assertTrue(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 0, false),
+            "missing loose supply still recovers the broken managed shulker drop"
+        );
+        assertFalse(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 1, true),
+            "recovered visible shulker source clears post-break recovery"
+        );
+        assertFalse(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(true, 1, false),
+            "failed-before-open recovery with recovered loose supply keeps the service-hole safety path"
+        );
     }
 
     private static void recoversFreshlyBrokenManagedShulkerDrop() {
@@ -206,6 +237,64 @@ final class PlaneReplenishManagedShulkerPureTest {
         assertEquals(1, timeoutNavigator.stopTicks, "stale missing supply shulker pickup stops navigation");
     }
 
+    private static void waitsForInventorySpaceBeforeAbandoningShulkerDrop() {
+        Object target = new Object();
+        boolean[] pickupable = {false};
+        PlaneTestPickupNavigator navigator = new PlaneTestPickupNavigator();
+        PlaneDroppedItemPickupWorkflow<Object> workflow = new PlaneDroppedItemPickupWorkflow<>(
+            () -> target,
+            item -> item == target,
+            item -> pickupable[0],
+            navigator,
+            Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
+            Phase.MISSING_ENDER_CHEST_SHULKER,
+            1,
+            3,
+            true
+        );
+
+        assertTrue(workflow.hasTarget(), "visible shulker target is retained even before it is pickupable");
+        assertEquals(
+            Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
+            workflow.tick(),
+            "unpickupable visible shulker waits instead of falling back"
+        );
+        assertEquals(0, navigator.pathTicks, "unpickupable visible shulker does not path");
+        assertEquals(1, navigator.stopTicks, "unpickupable visible shulker stops active pathing while waiting");
+
+        pickupable[0] = true;
+        assertEquals(
+            Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
+            workflow.tick(),
+            "pickup resumes after inventory space becomes available"
+        );
+        assertEquals(1, navigator.pathTicks, "pickupable shulker starts pathing after space is available");
+
+        PlaneTestPickupNavigator staleNavigator = new PlaneTestPickupNavigator();
+        PlaneDroppedItemPickupWorkflow<Object> staleWorkflow = new PlaneDroppedItemPickupWorkflow<>(
+            () -> target,
+            item -> item == target,
+            item -> false,
+            staleNavigator,
+            Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
+            Phase.MISSING_ENDER_CHEST_SHULKER,
+            1,
+            1,
+            true
+        );
+        assertEquals(
+            Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
+            staleWorkflow.tick(),
+            "stale unpickupable shulker gets one active wait tick"
+        );
+        assertEquals(
+            Phase.MISSING_ENDER_CHEST_SHULKER,
+            staleWorkflow.tick(),
+            "stale unpickupable shulker falls back after max target ticks"
+        );
+        assertEquals(3, staleNavigator.stopTicks, "stale unpickupable shulker stops navigation while waiting and on timeout");
+    }
+
     private static void timesOutStaleManagedShulkerRecoveryDrop() {
         Object target = new Object();
         PlaneTestPickupNavigator navigator = new PlaneTestPickupNavigator();
@@ -268,6 +357,14 @@ final class PlaneReplenishManagedShulkerPureTest {
         );
         assertEquals(2, navigator.pathTicks, "both distinct targets receive an active pickup tick");
         assertEquals(1, navigator.stopTicks, "only the stale replacement timeout stops navigation");
+    }
+
+    private static void usesLongShulkerRecoveryTimeout() {
+        assertEquals(
+            1200,
+            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS,
+            "managed shulker recovery keeps visible targets around for a longer timeout"
+        );
     }
 
     private static void plansShulkerExtractionFallbacks() {

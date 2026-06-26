@@ -1,8 +1,6 @@
 package com.watchmenbot.modules.stash;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.pathing.goals.GoalBlock;
-import baritone.api.pathing.goals.GoalNear;
+import com.watchmenbot.util.BaritoneCompatibility;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.Optional;
@@ -10,16 +8,25 @@ import java.util.Optional;
 final class StashNavigator {
     private static final int REPATH_COOLDOWN_TICKS = 40;
 
+    private final BaritonePathing pathing;
     private String lastGoalKey;
     private int repathCooldown;
 
+    StashNavigator() {
+        pathing = BaritoneCompatibility.available() ? new BaritoneStashNavigator() : null;
+    }
+
     void pathNear(StashTarget target, int interactionRange) {
+        if (pathing == null) return;
+
         int radius = Math.max(2, interactionRange);
         rememberGoal("near:" + target.id() + ":" + radius);
-        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalNear(target.interactionPos(), radius));
+        pathing.pathNear(target.interactionPos(), radius);
     }
 
     void pathToScannerTarget(StashTarget target, int interactionRange, Optional<BlockPos> standingPos) {
+        if (pathing == null) return;
+
         if (standingPos.isEmpty()) {
             pathNear(target, interactionRange);
             return;
@@ -27,12 +34,14 @@ final class StashNavigator {
 
         BlockPos pos = standingPos.get();
         rememberGoal(scannerGoalKey(target, interactionRange, standingPos));
-        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(pos));
+        pathing.pathToBlock(pos);
     }
 
     void returnTo(BlockPos startPos) {
+        if (pathing == null) return;
+
         rememberGoal("return:" + startPos.getX() + "," + startPos.getY() + "," + startPos.getZ());
-        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalNear(startPos, 1));
+        pathing.pathNear(startPos, 1);
     }
 
     void ensurePathNear(StashTarget target, int interactionRange) {
@@ -58,15 +67,15 @@ final class StashNavigator {
     }
 
     boolean isPathing() {
-        return BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing();
+        return pathing != null && pathing.isPathing();
     }
 
     boolean hasPath() {
-        return BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().hasPath();
+        return pathing != null && pathing.hasPath();
     }
 
     void stop() {
-        BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().forceCancel();
+        if (pathing != null) pathing.stop();
         lastGoalKey = null;
         repathCooldown = 0;
     }
@@ -92,5 +101,17 @@ final class StashNavigator {
 
         BlockPos pos = standingPos.get();
         return "scanner:" + target.id() + ":" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    interface BaritonePathing {
+        void pathNear(BlockPos pos, int radius);
+
+        void pathToBlock(BlockPos pos);
+
+        boolean isPathing();
+
+        boolean hasPath();
+
+        void stop();
     }
 }

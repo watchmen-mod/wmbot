@@ -10,7 +10,7 @@ Install WMBot as a client-side Fabric/Meteor addon alongside:
 - Java `21`
 - Fabric Loader
 - Meteor Client
-- Baritone for Meteor
+- Baritone for Minecraft `1.21.8`, either Baritone for Meteor or the normal Baritone release
 
 ## Modules
 
@@ -55,4 +55,4 @@ Useful verification tasks:
 
 Build outputs are written to `build/libs`.
 
-Put the remapped WMBot jar in your Minecraft `mods` folder with Meteor Client and Baritone for Minecraft 1.21.8.
+Put the remapped WMBot jar in your Minecraft `mods` folder with Meteor Client and exactly one compatible Baritone jar for Minecraft 1.21.8.

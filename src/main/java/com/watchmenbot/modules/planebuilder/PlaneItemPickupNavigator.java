@@ -1,14 +1,13 @@
 package com.watchmenbot.modules.planebuilder;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.pathing.goals.GoalBlock;
+import com.watchmenbot.util.BaritoneCompatibility;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.UUID;
 
 final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.Navigator<ItemEntity> {
-    private final PlaneBaritoneSafetyGuard safetyGuard = new PlaneBaritoneSafetyGuard();
+    private final BaritoneItemPickupPathing pathing = BaritoneCompatibility.available() ? new BaritonePlaneItemPickupNavigator() : null;
     private final PlaneEndermanLookSafety endermanLookSafety;
 
     private UUID targetId;
@@ -26,10 +25,11 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
 
     @Override
     public void pathTo(ItemEntity target) {
+        if (pathing == null) return;
         if (target == null) return;
 
         endermanLookSafety.lookDownIfUnsafe();
-        safetyGuard.apply();
+        pathing.applySafety();
         active = true;
 
         UUID nextId = target.getUuid();
@@ -46,25 +46,37 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
         targetId = nextId;
         targetPos = nextPos;
         repathCooldown = PlanePickupSettings.REPATH_COOLDOWN_TICKS;
-        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(nextPos));
+        pathing.pathTo(nextPos);
         endermanLookSafety.lookDownIfUnsafe();
     }
 
     @Override
     public void stop() {
         if (active) {
-            BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().forceCancel();
+            pathing.stop();
         }
 
         active = false;
         targetId = null;
         targetPos = null;
         repathCooldown = 0;
-        safetyGuard.restore();
+        if (pathing != null) pathing.restoreSafety();
         endermanLookSafety.lookDownIfUnsafe();
     }
 
     private boolean isPathing() {
-        return BaritoneAPI.getProvider().getPrimaryBaritone().getPathingBehavior().isPathing();
+        return pathing != null && pathing.isPathing();
+    }
+
+    interface BaritoneItemPickupPathing {
+        void applySafety();
+
+        void restoreSafety();
+
+        void pathTo(BlockPos target);
+
+        boolean isPathing();
+
+        void stop();
     }
 }

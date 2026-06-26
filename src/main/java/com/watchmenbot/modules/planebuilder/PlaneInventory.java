@@ -38,11 +38,23 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     }
 
     @Override
-    public int effectiveReplenishTarget(int configuredTarget) {
-        return PlaneInventoryQueries.effectiveReplenishTarget(
+    public int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace) {
+        return effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace, false);
+    }
+
+    @Override
+    public int effectiveReplenishTarget(
+        int configuredTarget,
+        boolean useAvailableSafeInventorySpace,
+        boolean reserveManagedShulkerSlot
+    ) {
+        int safeBuildBlockCapacity = useAvailableSafeInventorySpace ? view.safeBuildBlockCapacity(reserveManagedShulkerSlot) : 0;
+        return PlaneReplenishTargetPolicy.effectiveTarget(
             configuredTarget,
+            useAvailableSafeInventorySpace,
             config.replenishMinBuildBlocks(),
-            view.buildBlockCapacity()
+            view.buildBlockCapacity(),
+            safeBuildBlockCapacity
         );
     }
 
@@ -59,6 +71,11 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     @Override
     public boolean hasInventorySpaceForEnderChest() {
         return view.hasInventorySpaceForEnderChest();
+    }
+
+    @Override
+    public boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+        return view.hasInventorySpaceForEnderChestPreservingShulkerSlot();
     }
 
     @Override
@@ -100,6 +117,18 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     @Override
     public FindItemResult prepareUsableBow() {
         return preparation.prepareUsableBow();
+    }
+
+    @Override
+    public FindItemResult findHotbarSword() {
+        FindItemResult result = InvUtils.findInHotbar(view::isUsableSwordStack);
+
+        return result.isHotbar() ? result : null;
+    }
+
+    @Override
+    public FindItemResult prepareUsableSword() {
+        return preparation.prepareUsableSword();
     }
 
     @Override
@@ -205,6 +234,11 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     @Override
     public int findMainInventoryBowSlot() {
         return view.findMainInventoryBowSlot();
+    }
+
+    @Override
+    public int findMainInventorySwordSlot() {
+        return view.findMainInventorySwordSlot();
     }
 
     @Override

@@ -4,6 +4,9 @@ import com.watchmenbot.util.WorkflowLogger;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import net.minecraft.block.Blocks;
 
+import java.util.function.BooleanSupplier;
+import java.util.function.IntSupplier;
+
 final class EnderChestFarmWorkflow {
     private final PlaneInventory inventory;
     private final PlanePlacement placement;
@@ -14,6 +17,8 @@ final class EnderChestFarmWorkflow {
     private final PlaneBuilderSettings.Replenish replenishSettings;
     private final WorkflowLogger logger;
     private final EnderChestFarmProgress farmProgress;
+    private final BooleanSupplier reserveManagedShulkerSlot;
+    private final IntSupplier visibleDroppedObsidian;
     private final EnderChestBreakWatchdog breakWatchdog = new EnderChestBreakWatchdog();
     private boolean waitingForBreakCompletion;
 
@@ -41,6 +46,61 @@ final class EnderChestFarmWorkflow {
         WorkflowLogger logger,
         EnderChestFarmProgress farmProgress
     ) {
+        this(
+            inventory,
+            placement,
+            guards,
+            serviceHole,
+            serviceHoles,
+            actions,
+            replenishSettings,
+            logger,
+            farmProgress,
+            () -> false,
+            () -> 0
+        );
+    }
+
+    EnderChestFarmWorkflow(
+        PlaneInventory inventory,
+        PlanePlacement placement,
+        PlaneActionGuards guards,
+        ServiceHoleContext serviceHole,
+        ServiceHoleWorkflow serviceHoles,
+        PlaneWorldActions actions,
+        PlaneBuilderSettings.Replenish replenishSettings,
+        WorkflowLogger logger,
+        EnderChestFarmProgress farmProgress,
+        BooleanSupplier reserveManagedShulkerSlot
+    ) {
+        this(
+            inventory,
+            placement,
+            guards,
+            serviceHole,
+            serviceHoles,
+            actions,
+            replenishSettings,
+            logger,
+            farmProgress,
+            reserveManagedShulkerSlot,
+            () -> 0
+        );
+    }
+
+    EnderChestFarmWorkflow(
+        PlaneInventory inventory,
+        PlanePlacement placement,
+        PlaneActionGuards guards,
+        ServiceHoleContext serviceHole,
+        ServiceHoleWorkflow serviceHoles,
+        PlaneWorldActions actions,
+        PlaneBuilderSettings.Replenish replenishSettings,
+        WorkflowLogger logger,
+        EnderChestFarmProgress farmProgress,
+        BooleanSupplier reserveManagedShulkerSlot,
+        IntSupplier visibleDroppedObsidian
+    ) {
         this.inventory = inventory;
         this.placement = placement;
         this.guards = guards;
@@ -50,6 +110,8 @@ final class EnderChestFarmWorkflow {
         this.replenishSettings = replenishSettings;
         this.logger = logger;
         this.farmProgress = farmProgress;
+        this.reserveManagedShulkerSlot = reserveManagedShulkerSlot == null ? () -> false : reserveManagedShulkerSlot;
+        this.visibleDroppedObsidian = visibleDroppedObsidian == null ? () -> 0 : visibleDroppedObsidian;
     }
 
     Phase selectSource() {
@@ -72,9 +134,16 @@ final class EnderChestFarmWorkflow {
 
         int buildBlocks = inventory.countBuildBlock();
         EnderChestShulkerSourceScan scan = inventory.scanEnderChestShulkerSources();
+        int targetBuildBlocks = effectiveReplenishTarget();
+        int visibleDrops = visibleDroppedObsidian.getAsInt();
+        int effectiveBuildBlocks = farmProgress.effectiveBuildBlocks(buildBlocks, visibleDrops);
+        int sourceTarget = farmProgress.canFitAdditionalEnderChest(buildBlocks, targetBuildBlocks, visibleDrops)
+            ? targetBuildBlocks
+            : effectiveBuildBlocks;
+
         return PlaneReplenishDecisions.sourcePhase(
-            farmProgress.effectiveBuildBlocks(buildBlocks),
-            effectiveReplenishTarget(),
+            effectiveBuildBlocks,
+            sourceTarget,
             inventory.countLooseEnderChests(),
             scan.hasVisibleSource()
         );
@@ -114,14 +183,17 @@ final class EnderChestFarmWorkflow {
         if (status != ServiceHoleContext.Status.READY_ENDER_CHEST) {
             if (waitingForBreakCompletion && status == ServiceHoleContext.Status.READY_REPLACEABLE) {
                 farmProgress.recordFarmedEnderChest(buildBlocks);
-                buildBlocks = farmProgress.effectiveBuildBlocks(buildBlocks);
+                buildBlocks = farmProgress.effectiveBuildBlocks(buildBlocks, visibleDroppedObsidian.getAsInt());
             }
             else {
-                buildBlocks = farmProgress.effectiveBuildBlocks(buildBlocks);
+                buildBlocks = farmProgress.effectiveBuildBlocks(buildBlocks, visibleDroppedObsidian.getAsInt());
             }
             waitingForBreakCompletion = false;
             breakWatchdog.reset();
-            return PlaneReplenishDecisions.afterEnderChestBreak(status, buildBlocks, targetBuildBlocks);
+            int sourceTarget = farmProgress.canFitAdditionalEnderChest(inventory.countBuildBlock(), targetBuildBlocks, visibleDroppedObsidian.getAsInt())
+                ? targetBuildBlocks
+                : buildBlocks;
+            return PlaneReplenishDecisions.afterEnderChestBreak(status, buildBlocks, sourceTarget);
         }
 
         if (breakWatchdog.timeout(serviceHole.hole(), buildBlocks)) {
@@ -147,10 +219,19 @@ final class EnderChestFarmWorkflow {
     }
 
     boolean targetBuildBlockCountReached() {
-        return farmProgress.effectiveBuildBlocks(inventory.countBuildBlock()) >= effectiveReplenishTarget();
+        return !farmProgress.canFitAdditionalEnderChest(
+            inventory.countBuildBlock(),
+            effectiveReplenishTarget(),
+            visibleDroppedObsidian.getAsInt()
+        );
     }
 
     private int effectiveReplenishTarget() {
-        return inventory.effectiveReplenishTarget(replenishSettings.targetObsidian().get());
+        return PlaneReplenishTargets.effectiveTarget(
+            inventory,
+            replenishSettings.targetObsidian().get(),
+            replenishSettings.useAvailableSafeInventorySpace().get(),
+            reserveManagedShulkerSlot.getAsBoolean()
+        );
     }
 }

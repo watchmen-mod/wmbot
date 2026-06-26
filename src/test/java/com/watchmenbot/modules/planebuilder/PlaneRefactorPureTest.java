@@ -7,7 +7,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
-import java.util.EnumSet;
 import java.util.Set;
 
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertEquals;
@@ -34,6 +33,9 @@ final class PlaneRefactorPureTest {
         classifiesBowDurabilityThresholds();
         classifiesBowEligibility();
         classifiesBowPreparationDecisions();
+        classifiesSwordDurabilityThresholds();
+        classifiesSwordEligibility();
+        classifiesSwordPreparationDecisions();
         validatesPlacementRequestsInTwoStages();
         projectsWorkflowResults();
         PlaneCoordinatorTickPolicyPureTest.run();
@@ -564,6 +566,59 @@ final class PlaneRefactorPureTest {
         );
     }
 
+    private static void classifiesSwordDurabilityThresholds() {
+        assertTrue(
+            PlaneItemClassifier.remainingDurabilityPercent(100, 90) >= 10,
+            "10 percent remaining with threshold 10 is usable for swords"
+        );
+        assertFalse(
+            PlaneItemClassifier.remainingDurabilityPercent(100, 91) >= 10,
+            "9 percent remaining with threshold 10 is unsafe for swords"
+        );
+    }
+
+    private static void classifiesSwordEligibility() {
+        assertFalse(
+            PlaneItemClassifier.isUsableSword(false, 100, 0, 10),
+            "non-sword is rejected"
+        );
+        assertTrue(
+            PlaneItemClassifier.isUsableSword(true, 100, 90, 10),
+            "sword exactly at threshold is accepted"
+        );
+        assertFalse(
+            PlaneItemClassifier.isUsableSword(true, 100, 91, 10),
+            "sword below threshold is rejected"
+        );
+        assertFalse(
+            PlaneItemClassifier.isUsableSword(true, 0, 0, 10),
+            "non-damageable sword state is rejected"
+        );
+    }
+
+    private static void classifiesSwordPreparationDecisions() {
+        FindItemResult hotbar = new FindItemResult(1, 1);
+        assertEquals(
+            hotbar,
+            PlaneInventoryPreparation.swordPreparation(hotbar, true, false, new FindItemResult(2, 1)),
+            "usable hotbar sword wins without promotion"
+        );
+
+        FindItemResult missing = null;
+        assertEquals(
+            null,
+            PlaneInventoryPreparation.swordPreparation(missing, false, false, new FindItemResult(2, 1)),
+            "unsafe hotbar sword without usable main inventory replacement returns missing"
+        );
+
+        FindItemResult promoted = new FindItemResult(2, 1);
+        assertEquals(
+            promoted,
+            PlaneInventoryPreparation.swordPreparation(missing, false, true, promoted),
+            "unsafe hotbar sword promotes a usable main inventory sword"
+        );
+    }
+
     private static void classifiesPickaxeDurabilityThresholds() {
         assertTrue(
             PlaneItemClassifier.remainingDurabilityPercent(100, 89) >= 10,
@@ -630,14 +685,10 @@ final class PlaneRefactorPureTest {
     }
 
     private static void coversReplenishTransitionPhases() {
-        Set<Phase> terminalReplenishPhases = EnumSet.of(
-            Phase.MISSING_PICKAXE,
-            Phase.MISSING_ENDER_CHEST_SHULKER
-        );
         Set<Phase> transitionPhases = PlaneReplenishWorkflow.transitionPhases();
 
         for (Phase phase : Phase.values()) {
-            if (!phase.replenishActive() || terminalReplenishPhases.contains(phase)) continue;
+            if (!phase.replenishActive()) continue;
 
             assertTrue(transitionPhases.contains(phase), phase + " has a registered replenish transition");
         }

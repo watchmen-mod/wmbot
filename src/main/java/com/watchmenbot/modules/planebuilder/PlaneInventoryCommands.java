@@ -12,4 +12,6 @@ interface PlaneInventoryCommands {
     FindItemResult prepareUsableEnderChestShulker();
 
     FindItemResult prepareUsablePickaxe();
+
+    FindItemResult prepareUsableSword();
 }

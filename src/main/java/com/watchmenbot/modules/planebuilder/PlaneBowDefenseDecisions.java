@@ -24,8 +24,8 @@ final class PlaneBowDefenseDecisions {
         return readyForBowContinue && !replenishActive;
     }
 
-    static boolean shouldRelease(int chargeTicks, int requiredChargeTicks, boolean directHit) {
-        return chargeTicks >= requiredChargeTicks && directHit;
+    static boolean shouldRelease(int chargeTicks, int requiredChargeTicks, int stableDirectHitTicks, int requiredStableDirectHitTicks) {
+        return chargeTicks >= requiredChargeTicks && stableDirectHitTicks >= requiredStableDirectHitTicks;
     }
 
     static boolean timedOutWaitingForDirectHit(int aimWaitTicks, int maxAimWaitTicks) {

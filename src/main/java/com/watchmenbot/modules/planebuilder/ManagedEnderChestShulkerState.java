@@ -46,6 +46,10 @@ final class ManagedEnderChestShulkerState {
         failedBeforeOpenRecovery = false;
     }
 
+    void markRecovered() {
+        reset();
+    }
+
     boolean placedAt(BlockPos hole, ServiceHoleContext.Status status) {
         return placedHole != null
             && hole != null
@@ -59,6 +63,10 @@ final class ManagedEnderChestShulkerState {
 
     boolean postBreakRecovery() {
         return postBreakRecovery;
+    }
+
+    boolean reservesInventorySlot() {
+        return placedHole != null || postBreakRecovery;
     }
 
     boolean openedOrExtracted() {

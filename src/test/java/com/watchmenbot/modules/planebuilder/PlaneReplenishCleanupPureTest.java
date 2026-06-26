@@ -11,9 +11,11 @@ final class PlaneReplenishCleanupPureTest {
     static void run() {
         plansReplenishDropCleanupTransitions();
         plansGenericDroppedItemPickupFallback();
+        prioritizesManagedShulkerPickupBeforeGenericCleanup();
         exitsPickupWhenCleanupDropCannotFit();
         matchesReplenishCleanupStacks();
         plansCleanupDropPickupCapacity();
+        plansEnderChestPickupCapacityWithReservedShulkerSlot();
         matchesTrashStacks();
         tracksTrashDropWait();
         plansTrashFallWaitDecisions();
@@ -96,6 +98,44 @@ final class PlaneReplenishCleanupPureTest {
         );
         assertEquals(2, timeoutNavigator.pathTicks, "timeout target paths only before fallback");
         assertEquals(1, timeoutNavigator.stopTicks, "timeout fallback stops navigator");
+    }
+
+    private static void prioritizesManagedShulkerPickupBeforeGenericCleanup() {
+        Object shulkerDrop = new Object();
+        Object obsidianDrop = new Object();
+        PlaneTestPickupNavigator shulkerNavigator = new PlaneTestPickupNavigator();
+        PlaneTestPickupNavigator obsidianNavigator = new PlaneTestPickupNavigator();
+        PlaneDroppedItemPickupWorkflow<Object> shulkerPickup = new PlaneDroppedItemPickupWorkflow<>(
+            () -> shulkerDrop,
+            item -> item == shulkerDrop,
+            item -> true,
+            shulkerNavigator,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            0,
+            10,
+            true
+        );
+        PlaneDroppedItemPickupWorkflow<Object> obsidianCleanup = new PlaneDroppedItemPickupWorkflow<>(
+            () -> obsidianDrop,
+            item -> item == obsidianDrop,
+            item -> true,
+            obsidianNavigator,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.MOVING_TO_TRASH_EDGE,
+            0,
+            10
+        );
+
+        Phase next = shulkerPickup.hasTarget() ? shulkerPickup.tick() : obsidianCleanup.tick();
+
+        assertEquals(
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            next,
+            "managed shulker pickup stays in cleanup phase"
+        );
+        assertEquals(1, shulkerNavigator.pathTicks, "managed shulker pickup paths first");
+        assertEquals(0, obsidianNavigator.pathTicks, "generic obsidian cleanup waits while managed shulker is available");
     }
 
     private static void exitsPickupWhenCleanupDropCannotFit() {
@@ -184,6 +224,25 @@ final class PlaneReplenishCleanupPureTest {
         assertFalse(
             PlaneInventoryQueries.cleanupDropPickupable(false, false, true, true),
             "unrelated drop is not treated as pickupable cleanup"
+        );
+    }
+
+    private static void plansEnderChestPickupCapacityWithReservedShulkerSlot() {
+        assertTrue(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(true, 1),
+            "partial ender chest stack accepts pickup while preserving one shulker slot"
+        );
+        assertTrue(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(false, 2),
+            "two empty slots allow one ender chest pickup and one reserved shulker slot"
+        );
+        assertFalse(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(false, 1),
+            "only empty slot is reserved for the shulker drop"
+        );
+        assertFalse(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(true, 0),
+            "full inventory cannot preserve a shulker pickup slot"
         );
     }
 

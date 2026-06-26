@@ -8,12 +8,21 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.mob.Angerable;
+import net.minecraft.entity.mob.MobEntity;
 
 final class PlaneBowTargeting {
+    static final double MELEE_PREP_RANGE = 4.5;
+    static final double BOW_FALLBACK_MIN_RANGE = 6.0;
+
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
     Entity nearestSafeBowTarget(double range) {
         return TargetUtils.get(entity -> safeBowTarget(entity, range), SortPriority.LowestDistance);
+    }
+
+    Entity nearestCloseMeleeThreat() {
+        return TargetUtils.get(this::closeMeleeThreat, SortPriority.LowestDistance);
     }
 
     Entity lockedTarget(int targetId) {
@@ -21,15 +30,77 @@ final class PlaneBowTargeting {
     }
 
     boolean safeBowTarget(Entity entity, double range) {
-        if (entity == null || entity == mc.player || entity == mc.cameraEntity) return false;
-        if (!(entity instanceof LivingEntity living)) return false;
-        if (!entity.isAlive() || living.isDead()) return false;
-        if (!PlayerUtils.isWithin(entity, range)) return false;
-        if (!KillAuraCompanionSettings.isMobGroup(entity.getType().getSpawnGroup())) return false;
-        if (!EntityUtils.isAttackable(entity.getType())) return false;
-        if (entity.getType() == EntityType.PLAYER || entity.getType() == EntityType.ENDERMAN) return false;
-        if (entity.hasCustomName()) return false;
+        return bowTargetStatus(entity, range) == BowTargetStatus.READY;
+    }
 
-        return PlayerUtils.canSeeEntity(entity);
+    BowTargetStatus bowTargetStatus(Entity entity, double range) {
+        TargetFacts facts = targetFacts(entity);
+        if (facts == null) return BowTargetStatus.INVALID;
+        if (!facts.visible()) return BowTargetStatus.NOT_VISIBLE;
+        if (facts.distance() > range) return BowTargetStatus.OUT_OF_RANGE;
+        if (facts.distance() <= MELEE_PREP_RANGE) return BowTargetStatus.MELEE_HANDOFF;
+        if (!facts.aggroedOnBot() && facts.distance() < BOW_FALLBACK_MIN_RANGE) return BowTargetStatus.WAITING_FOR_SPACING;
+
+        return BowTargetStatus.READY;
+    }
+
+    boolean closeMeleeThreat(Entity entity) {
+        TargetFacts facts = targetFacts(entity);
+        return facts != null && meleePrepPolicy(facts.distance(), facts.aggroedOnBot());
+    }
+
+    static boolean bowTargetPolicy(double distance, double maxRange, boolean visible, boolean aggroedOnBot) {
+        if (!visible || distance > maxRange) return false;
+        if (distance <= MELEE_PREP_RANGE) return false;
+
+        return aggroedOnBot || distance >= BOW_FALLBACK_MIN_RANGE;
+    }
+
+    static boolean meleePrepPolicy(double distance, boolean aggroedOnBot) {
+        return aggroedOnBot && distance <= MELEE_PREP_RANGE;
+    }
+
+    private TargetFacts targetFacts(Entity entity) {
+        if (entity == null || mc.player == null || entity == mc.player || entity == mc.cameraEntity) return null;
+        if (!(entity instanceof MobEntity mob)) return null;
+
+        LivingEntity living = mob;
+        if (!entity.isAlive() || living.isDead()) return null;
+        if (!KillAuraCompanionSettings.isHostileMobGroup(entity.getType().getSpawnGroup())) return null;
+        if (!KillAuraCompanionSettings.isAllowedMobEntity(
+            EntityUtils.isAttackable(entity.getType()),
+            entity.getType() == EntityType.PLAYER,
+            entity.getType() == EntityType.ENDERMAN
+        )) return null;
+        if (entity.hasCustomName()) return null;
+
+        boolean aggroedOnBot = KillAuraCompanionSettings.isAggroedOnBot(
+            mob.getTarget() == mc.player,
+            entity instanceof Angerable angerable ? angerable.getAngryAt() : null,
+            mc.player.getUuid()
+        );
+        return new TargetFacts(mc.player.distanceTo(entity), PlayerUtils.canSeeEntity(entity), aggroedOnBot);
+    }
+
+    private record TargetFacts(double distance, boolean visible, boolean aggroedOnBot) {
+    }
+
+    enum BowTargetStatus {
+        READY("target ready"),
+        INVALID("target lost"),
+        NOT_VISIBLE("visibility lost"),
+        OUT_OF_RANGE("target out of bow range"),
+        MELEE_HANDOFF("target entered melee handoff range"),
+        WAITING_FOR_SPACING("target is too close without bot aggro");
+
+        private final String logReason;
+
+        BowTargetStatus(String logReason) {
+            this.logReason = logReason;
+        }
+
+        String logReason() {
+            return logReason;
+        }
     }
 }

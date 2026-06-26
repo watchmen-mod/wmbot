@@ -8,13 +8,21 @@ import net.minecraft.screen.ScreenHandler;
 interface PlaneInventoryAccess {
     int countBuildBlock();
 
-    int effectiveReplenishTarget(int configuredTarget);
+    int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace);
+
+    int effectiveReplenishTarget(
+        int configuredTarget,
+        boolean useAvailableSafeInventorySpace,
+        boolean reserveManagedShulkerSlot
+    );
 
     int requiredEnderChestsForTarget(int targetBuildBlocks);
 
     int countLooseEnderChests();
 
     boolean hasInventorySpaceForEnderChest();
+
+    boolean hasInventorySpaceForEnderChestPreservingShulkerSlot();
 
     FindItemResult findHotbarBuildBlock();
 
@@ -37,6 +45,8 @@ interface PlaneInventoryAccess {
     int findMainInventoryPickaxeSlot();
 
     int findMainInventoryBowSlot();
+
+    int findMainInventorySwordSlot();
 
     boolean hasAnyEnderChestShulker();
 
@@ -61,4 +71,10 @@ interface PlaneInventoryAccess {
     boolean isEnderChestSupplyStack(ItemStack stack);
 
     FindItemResult findHotbarPickaxe();
+
+    FindItemResult prepareUsablePickaxe();
+
+    FindItemResult findHotbarSword();
+
+    FindItemResult prepareUsableSword();
 }
