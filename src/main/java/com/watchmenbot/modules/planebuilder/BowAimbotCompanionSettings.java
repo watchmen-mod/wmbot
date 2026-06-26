@@ -29,7 +29,7 @@ final class BowAimbotCompanionSettings {
         );
 
         CompanionModuleManager.setting(bowAimbot, RANGE, Double.class).set(range);
-        CompanionModuleManager.<Set<EntityType<?>>>setting(bowAimbot, ENTITIES, Set.class).set(KillAuraCompanionSettings.entities());
+        CompanionModuleManager.<Set<EntityType<?>>>setting(bowAimbot, ENTITIES, Set.class).set(PlaneBowDefenseTargets.entities());
         CompanionModuleManager.setting(bowAimbot, PRIORITY, SortPriority.class).set(SortPriority.LowestDistance);
         CompanionModuleManager.setting(bowAimbot, BABIES, Boolean.class).set(true);
         CompanionModuleManager.setting(bowAimbot, NAMETAGGED, Boolean.class).set(false);

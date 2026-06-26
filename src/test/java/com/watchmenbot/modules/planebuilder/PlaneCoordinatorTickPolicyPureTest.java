@@ -160,6 +160,10 @@ final class PlaneCoordinatorTickPolicyPureTest {
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.MOVING_TO_TRASH_EDGE),
             "trash edge movement allows hole escape before direct walking"
         );
+        assertTrue(
+            PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.SERVICE_HOLE_BLOCKED),
+            "blocked service-hole recovery allows hole escape before retrying replenish"
+        );
         assertFalse(
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.PLACING_ENDER_CHEST),
             "ender chest farming does not release replenish for hole escape"

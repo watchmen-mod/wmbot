@@ -1,13 +1,13 @@
 package com.watchmenbot.modules.planebuilder;
 
-import meteordevelopment.meteorclient.utils.entity.EntityUtils;
 import meteordevelopment.meteorclient.utils.entity.SortPriority;
 import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+
+import java.util.Set;
 
 final class PlaneBowTargeting {
     private final MinecraftClient mc = MinecraftClient.getInstance();
@@ -16,10 +16,10 @@ final class PlaneBowTargeting {
         return TargetUtils.get(entity -> safeBowTarget(entity, range), SortPriority.LowestDistance);
     }
 
-    Entity nearestSafeBowTarget(double range, int suppressedTargetId, int suppressionTicksRemaining) {
+    Entity nearestSafeBowTarget(double range, Set<Integer> suppressedTargetIds) {
         return TargetUtils.get(
             entity -> safeBowTarget(entity, range)
-                && !PlaneBowDefenseDecisions.suppressesTarget(suppressedTargetId, entity.getId(), suppressionTicksRemaining),
+                && (suppressedTargetIds == null || !suppressedTargetIds.contains(entity.getId())),
             SortPriority.LowestDistance
         );
     }
@@ -33,9 +33,8 @@ final class PlaneBowTargeting {
         if (!(entity instanceof LivingEntity living)) return false;
         if (!entity.isAlive() || living.isDead()) return false;
         if (!PlayerUtils.isWithin(entity, range)) return false;
-        if (!KillAuraCompanionSettings.isMobGroup(entity.getType().getSpawnGroup())) return false;
-        if (!EntityUtils.isAttackable(entity.getType())) return false;
-        if (entity.getType() == EntityType.PLAYER || entity.getType() == EntityType.ENDERMAN) return false;
+        if (!PlaneBowDefenseTargets.isThreatGroup(entity.getType().getSpawnGroup())) return false;
+        if (!PlaneBowDefenseTargets.isAllowedEntityType(entity.getType())) return false;
         if (entity.hasCustomName()) return false;
 
         return PlayerUtils.canSeeEntity(entity);

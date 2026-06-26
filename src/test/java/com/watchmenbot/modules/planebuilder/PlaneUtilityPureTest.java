@@ -29,6 +29,7 @@ final class PlaneUtilityPureTest {
         selectsHoleEscapeTargets();
         selectsTrashEdgeTargets();
         selectsKillAuraMobGroups();
+        selectsBowDefenseThreatTargets();
         detectsUnsafeEndermanLooks();
         detectsAutoElytraObstructionsAndLandingTargets();
     }
@@ -203,33 +204,67 @@ final class PlaneUtilityPureTest {
     private static void classifiesServiceHoleCandidates() {
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.OPEN_SUPPORTED,
-            PlaneAreaScanner.serviceHoleCandidateKind(false, true, true, false),
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, true, false),
             "already-open supported service hole is selectable"
         );
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED,
-            PlaneAreaScanner.serviceHoleCandidateKind(true, false, true, false),
-            "capped service hole with valid support is selectable"
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, true, false),
+            "obsidian capped service hole with valid support is selectable"
         );
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT,
-            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, true),
-            "capped service hole with replaceable support is selectable after support placement"
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false, true),
+            "obsidian capped service hole with replaceable support is selectable after support placement"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, true, false),
+            "breakable terrain capped service hole with valid support is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, false, true),
+            "breakable terrain capped service hole with replaceable support is selectable after support placement"
         );
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.NONE,
-            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false),
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false, false),
             "non-solid occupied support is rejected"
         );
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.NONE,
-            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, true),
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, false, true),
             "open replaceable hole without valid support is rejected"
         );
         assertEquals(
             PlaneAreaScanner.ServiceHoleCandidate.NONE,
-            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, false),
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, false, true, false),
             "arbitrary supported non-service block is rejected"
+        );
+        assertTrue(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, false, false),
+            "generic solid breakable center is a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, false, false, false),
+            "unbreakable center is rejected as a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, false, true, true, false, false),
+            "non-solid occupied center is rejected as a service hole cap"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, true, false),
+            "ender chest center is handled by workflow rather than terrain cap selection"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, true, true, false, true),
+            "shulker center is handled by workflow rather than terrain cap selection"
+        );
+        assertFalse(
+            PlaneAreaScanner.breakableServiceHoleCap(false, false, true, false, true, false, false),
+            "fluid center is rejected as a service hole cap"
         );
 
         assertTrue(
@@ -541,6 +576,19 @@ final class PlaneUtilityPureTest {
         assertTrue(KillAuraCompanionSettings.isMobGroup(SpawnGroup.UNDERGROUND_WATER_CREATURE), "underground water mobs are selected");
         assertTrue(KillAuraCompanionSettings.isMobGroup(SpawnGroup.AXOLOTLS), "axolotl mobs are selected");
         assertFalse(KillAuraCompanionSettings.isMobGroup(SpawnGroup.MISC), "misc entities are not selected");
+    }
+
+    private static void selectsBowDefenseThreatTargets() {
+        assertTrue(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.MONSTER), "bow defense selects hostile monster mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.CREATURE), "bow defense ignores passive creature mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.AMBIENT), "bow defense ignores ambient mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.WATER_CREATURE), "bow defense ignores water creature mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.WATER_AMBIENT), "bow defense ignores water ambient mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.UNDERGROUND_WATER_CREATURE), "bow defense ignores underground water mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.AXOLOTLS), "bow defense ignores axolotl mobs");
+        assertFalse(PlaneBowDefenseTargets.isThreatGroup(SpawnGroup.MISC), "bow defense ignores misc entities");
+
+        assertTrue(KillAuraCompanionSettings.isMobGroup(SpawnGroup.CREATURE), "KillAura companion keeps broad mob coverage");
     }
 
     private static boolean[] hotbarEmpties(int... emptySlots) {

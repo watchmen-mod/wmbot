@@ -20,7 +20,7 @@ final class PlaneBowShotSimulator {
             HitResult result = simulator.tick();
             if (result == null) continue;
             if (result instanceof EntityHitResult entityHit) {
-                return entityHit.getEntity() == target;
+                return entityHit.getEntity().getId() == target.getId();
             }
 
             return false;

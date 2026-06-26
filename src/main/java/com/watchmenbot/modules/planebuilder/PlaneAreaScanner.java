@@ -3,6 +3,7 @@ package com.watchmenbot.modules.planebuilder;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.ShulkerBoxBlock;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
@@ -76,6 +77,20 @@ final class PlaneAreaScanner {
         return block == Blocks.OBSIDIAN || block == Blocks.CRYING_OBSIDIAN;
     }
 
+    boolean isBreakableServiceHoleCap(BlockPos pos) {
+        BlockState state = world.blockState(pos);
+        Block block = state.getBlock();
+        return breakableServiceHoleCap(
+            isServiceHoleBlock(pos),
+            state.isReplaceable(),
+            world.isSolidBlock(pos),
+            state.getFluidState().isEmpty(),
+            state.getHardness(context.world(), pos) >= 0.0f,
+            block == Blocks.ENDER_CHEST,
+            block instanceof ShulkerBoxBlock
+        );
+    }
+
     boolean validServiceSupport(BlockPos support) {
         BlockState state = world.blockState(support);
         return serviceSupportUsable(state.isReplaceable(), world.isSolidBlock(support));
@@ -99,6 +114,7 @@ final class PlaneAreaScanner {
         BlockPos support = pos.down();
         return serviceHoleCandidateKind(
             isServiceHoleBlock(pos),
+            isBreakableServiceHoleCap(pos),
             world.isReplaceable(pos),
             validServiceSupport(support),
             world.isReplaceable(support)
@@ -123,6 +139,7 @@ final class PlaneAreaScanner {
 
     static ServiceHoleCandidate serviceHoleCandidateKind(
         boolean serviceHoleBlock,
+        boolean breakableServiceHoleCap,
         boolean holeReplaceable,
         boolean supportValid,
         boolean supportReplaceable
@@ -131,10 +148,28 @@ final class PlaneAreaScanner {
             return supportValid ? ServiceHoleCandidate.OPEN_SUPPORTED : ServiceHoleCandidate.NONE;
         }
 
-        if (!serviceHoleBlock) return ServiceHoleCandidate.NONE;
+        if (!serviceHoleBlock && !breakableServiceHoleCap) return ServiceHoleCandidate.NONE;
         if (supportValid) return ServiceHoleCandidate.CAPPED_SUPPORTED;
         if (supportReplaceable) return ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT;
         return ServiceHoleCandidate.NONE;
+    }
+
+    static boolean breakableServiceHoleCap(
+        boolean serviceHoleBlock,
+        boolean replaceable,
+        boolean solid,
+        boolean fluidEmpty,
+        boolean breakable,
+        boolean enderChest,
+        boolean shulker
+    ) {
+        return !serviceHoleBlock
+            && !replaceable
+            && solid
+            && fluidEmpty
+            && breakable
+            && !enderChest
+            && !shulker;
     }
 
     enum ServiceHoleCandidate {

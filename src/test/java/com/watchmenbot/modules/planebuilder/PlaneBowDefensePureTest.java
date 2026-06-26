@@ -98,12 +98,24 @@ final class PlaneBowDefensePureTest {
             "bow defense releases after charge when prediction hits locked target"
         );
         assertFalse(
+            PlaneBowDefenseDecisions.shouldCheckDirectHit(19, 20, 30, 3),
+            "bow defense does not check direct-hit prediction before required charge"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.shouldCheckDirectHit(20, 20, 2, 3),
+            "bow defense lets aim settle before trusting direct-hit misses"
+        );
+        assertTrue(
+            PlaneBowDefenseDecisions.shouldCheckDirectHit(20, 20, 3, 3),
+            "bow defense checks direct-hit prediction after charge and aim settle"
+        );
+        assertFalse(
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(29, 30),
-            "bow defense keeps waiting before timeout"
+            "bow defense keeps waiting before charged aim timeout"
         );
         assertTrue(
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(30, 30),
-            "bow defense cancels at timeout"
+            "bow defense cancels at charged aim timeout"
         );
     }
 

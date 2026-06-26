@@ -198,6 +198,11 @@ final class PlaneReplenishPureTest {
             "supported build block is ready"
         );
         assertEquals(
+            ServiceHoleContext.Status.READY_BREAKABLE_CAP,
+            ServiceHoleContext.statusFor(true, true, ServiceHoleContext.HoleBlock.BREAKABLE_CAP),
+            "supported breakable cap is ready to open"
+        );
+        assertEquals(
             ServiceHoleContext.Status.READY_REPLACEABLE,
             ServiceHoleContext.statusFor(true, true, ServiceHoleContext.HoleBlock.REPLACEABLE),
             "supported replaceable hole is ready"
@@ -219,8 +224,10 @@ final class PlaneReplenishPureTest {
         );
 
         assertTrue(ServiceHoleContext.Status.READY_REPLACEABLE.readyForWorkflow(), "ready status allows workflow");
+        assertTrue(ServiceHoleContext.Status.READY_BREAKABLE_CAP.readyForWorkflow(), "breakable cap allows opening workflow");
         assertTrue(ServiceHoleContext.Status.READY_ENDER_CHEST.openForReplenish(), "ender chest status is open for replenish");
         assertFalse(ServiceHoleContext.Status.READY_BUILD_BLOCK.openForReplenish(), "build block must be opened before replenish");
+        assertFalse(ServiceHoleContext.Status.READY_BREAKABLE_CAP.openForReplenish(), "breakable cap must be opened before replenish");
         assertFalse(ServiceHoleContext.Status.INVALID_SUPPORT.readyForWorkflow(), "invalid support blocks workflow");
     }
 
@@ -401,6 +408,11 @@ final class PlaneReplenishPureTest {
             null,
             PlaneReplenishDecisions.serviceHoleReadyPhase(ServiceHoleContext.Status.READY_REPLACEABLE),
             "ready service hole has no unavailable phase"
+        );
+        assertEquals(
+            null,
+            PlaneReplenishDecisions.serviceHoleReadyPhase(ServiceHoleContext.Status.READY_BREAKABLE_CAP),
+            "breakable capped service hole can proceed to opening"
         );
         assertEquals(
             Phase.SERVICE_HOLE_BLOCKED,
