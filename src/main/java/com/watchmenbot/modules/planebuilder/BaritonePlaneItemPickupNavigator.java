@@ -1,10 +1,12 @@
 package com.watchmenbot.modules.planebuilder;
 
 import baritone.api.BaritoneAPI;
-import baritone.api.pathing.goals.GoalBlock;
+import baritone.api.pathing.goals.GoalNear;
 import net.minecraft.util.math.BlockPos;
 
 final class BaritonePlaneItemPickupNavigator implements PlaneItemPickupNavigator.BaritoneItemPickupPathing {
+    private static final int PICKUP_GOAL_RADIUS = 1;
+
     private final PlaneBaritoneSafetyGuard safetyGuard = new PlaneBaritoneSafetyGuard();
 
     @Override
@@ -19,7 +21,7 @@ final class BaritonePlaneItemPickupNavigator implements PlaneItemPickupNavigator
 
     @Override
     public void pathTo(BlockPos target) {
-        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalBlock(target));
+        BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalNear(target, PICKUP_GOAL_RADIUS));
     }
 
     @Override

@@ -2,7 +2,7 @@ package com.watchmenbot.modules.planebuilder;
 
 final class PlanePickupSettings {
     static final double KITBOT_REFILL_SCAN_RADIUS = 24.0;
-    static final double REPLENISH_CLEANUP_SCAN_RADIUS = 12.0;
+    static final double REPLENISH_CLEANUP_SCAN_RADIUS = KITBOT_REFILL_SCAN_RADIUS;
     static final double SHULKER_RECOVERY_SCAN_RADIUS = 24.0;
     static final int REPLENISH_CLEANUP_GRACE_TICKS = 60;
     static final int REPLENISH_CLEANUP_MAX_TARGET_TICKS = 200;
