@@ -4,18 +4,20 @@ import net.minecraft.entity.ItemEntity;
 import net.minecraft.item.ItemStack;
 
 final class PlaneReplenishDropDetector {
-    private final PlaneDroppedItemScanner scanner;
+    private final PlaneDroppedItemScanner cleanupScanner;
+    private final PlaneDroppedItemScanner shulkerScanner;
 
     PlaneReplenishDropDetector() {
-        scanner = new PlaneDroppedItemScanner(PlanePickupSettings.REPLENISH_CLEANUP_SCAN_RADIUS, this::matchesCleanupDrop);
+        cleanupScanner = new PlaneDroppedItemScanner(PlanePickupSettings.REPLENISH_CLEANUP_SCAN_RADIUS, this::matchesCleanupDrop);
+        shulkerScanner = new PlaneDroppedItemScanner(PlanePickupSettings.SHULKER_RECOVERY_SCAN_RADIUS, this::matchesShulkerDrop);
     }
 
     ItemEntity nearestCleanupDrop() {
-        return scanner.nearestMatchingDrop();
+        return cleanupScanner.nearestMatchingDrop();
     }
 
     ItemEntity nearestShulkerDrop() {
-        return scanner.nearestMatchingDrop(this::matchesShulkerDrop);
+        return shulkerScanner.nearestMatchingDrop();
     }
 
     boolean matchesCleanupDrop(ItemEntity item) {

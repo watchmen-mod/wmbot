@@ -126,6 +126,20 @@ final class PlaneReplenishManagedShulkerWorkflow {
         return kitbotRefill.missingSupplyPhase(Phase.MISSING_ENDER_CHEST_SHULKER, false);
     }
 
+    Phase recoverMissingEnderChestShulker() {
+        EnderChestShulkerSourceScan scan = inventory.scanEnderChestShulkerSources();
+        if (scan.hasVisibleSource()) {
+            missingShulkerPickup.reset();
+            return Phase.PLACING_ENDER_CHEST_SHULKER;
+        }
+
+        if (missingShulkerPickup.hasTarget()) {
+            return missingShulkerPickup.tick();
+        }
+
+        return kitbotRefill.missingSupplyPhase(Phase.MISSING_ENDER_CHEST_SHULKER, false);
+    }
+
     Phase handleMissingSupply(Phase next) {
         if (!missingSupplyPhase(next)) return next;
 

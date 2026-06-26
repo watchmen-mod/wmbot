@@ -33,6 +33,10 @@ final class PlaneInventoryMover {
         ensureInventorySlotInHotbar(findInventoryBowSlot());
     }
 
+    void ensureSwordInHotbar() {
+        ensureInventorySlotInHotbar(findInventorySwordSlot());
+    }
+
     private void ensureInventorySlotInHotbar(int sourceSlot) {
         if (mc.player == null || mc.interactionManager == null) return;
         if (!guards.readyForHotbarMutation()) return;
@@ -67,6 +71,10 @@ final class PlaneInventoryMover {
 
     private int findInventoryBowSlot() {
         return inventory.findMainInventoryBowSlot();
+    }
+
+    private int findInventorySwordSlot() {
+        return inventory.findMainInventorySwordSlot();
     }
 
     private int findHotbarSwapTarget() {

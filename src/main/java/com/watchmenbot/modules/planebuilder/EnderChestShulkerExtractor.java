@@ -126,6 +126,10 @@ final class EnderChestShulkerExtractor {
             screens.close();
             return Phase.BREAKING_ENDER_CHEST_SHULKER;
         }
+        if (!inventory.hasInventorySpaceForEnderChestPreservingShulkerSlot()) {
+            screens.close();
+            return session.unavailablePhase(currentLooseEnderChests);
+        }
         if (!inventory.hasInventorySpaceForEnderChest()) {
             screens.close();
             return session.unavailablePhase(currentLooseEnderChests);

@@ -11,6 +11,7 @@ final class PlaneBuilderCoordinator {
     private final PlaneHoleEscapeController holeEscape;
     private final PlaneBuildLoop buildLoop;
     private final PlaneReplenishWorkflow replenish;
+    private final PlaneMeleeDefenseWorkflow meleeDefense;
     private final PlaneBowDefenseWorkflow bowDefense;
     private final PlaneCoordinatorSafetyWorkflow safety;
     private final PlaneCoordinatorOwnerWorkflow owners;
@@ -106,6 +107,7 @@ final class PlaneBuilderCoordinator {
         holeEscape = components.holeEscape();
         buildLoop = components.buildLoop();
         replenish = components.replenish();
+        meleeDefense = components.meleeDefense();
         bowDefense = components.bowDefense();
         PlaneEndermanLookSafety endermanLookSafety = components.endermanLookSafety();
         owners = new PlaneCoordinatorOwnerWorkflow(
@@ -210,6 +212,8 @@ final class PlaneBuilderCoordinator {
         }
 
         if (safety.tickHoleEscapeOwner(playerPos)) return;
+
+        meleeDefense.tick();
 
         BowDefenseTickResult bowDefenseResult = bowDefense.tickResult(false);
         owner = PlaneCoordinatorTickPolicy.owner(false, bowDefenseResult.active(), guards.readyForWorldAction());

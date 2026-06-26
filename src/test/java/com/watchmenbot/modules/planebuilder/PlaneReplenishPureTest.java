@@ -33,6 +33,7 @@ final class PlaneReplenishPureTest {
         PlaneReplenishCleanupPureTest.run();
         plansServiceHoleReadiness();
         plansMissingObsidianRecovery();
+        plansMissingPickaxeRecovery();
         tracksReplenishActivePhases();
         tracksPhasePolicy();
         preservesActiveReplenishWhileKitbotRefillIsPending();
@@ -449,6 +450,29 @@ final class PlaneReplenishPureTest {
         );
     }
 
+    private static void plansMissingPickaxeRecovery() {
+        assertEquals(
+            Phase.MISSING_PICKAXE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(null, Phase.BREAKING_ENDER_CHEST),
+            "missing usable pickaxe keeps missing pickaxe recovery active"
+        );
+        assertEquals(
+            Phase.MISSING_PICKAXE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(10, 1), Phase.OPENING_SERVICE_HOLE),
+            "non-hotbar pickaxe lookup keeps missing pickaxe recovery active"
+        );
+        assertEquals(
+            Phase.BREAKING_ENDER_CHEST_SHULKER,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(2, 1), Phase.BREAKING_ENDER_CHEST_SHULKER),
+            "usable hotbar pickaxe restores the recorded break phase"
+        );
+        assertEquals(
+            Phase.SELECTING_SERVICE_HOLE,
+            PlaneReplenishWorkflow.missingPickaxeRecoveryPhase(new FindItemResult(2, 1), null),
+            "usable hotbar pickaxe without a recorded origin restarts service-hole selection"
+        );
+    }
+
     private static void tracksReplenishActivePhases() {
         assertFalse(PlaneReplenishDecisions.active(Phase.IDLE, false), "idle is not active");
         assertTrue(PlaneReplenishDecisions.active(Phase.SELECTING_SERVICE_HOLE, false), "selecting service hole is active");
@@ -557,6 +581,11 @@ final class PlaneReplenishPureTest {
         }
 
         @Override
+        public boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+            throw unsupported();
+        }
+
+        @Override
         public FindItemResult findHotbarBuildBlock() {
             throw unsupported();
         }
@@ -608,6 +637,11 @@ final class PlaneReplenishPureTest {
 
         @Override
         public int findMainInventoryBowSlot() {
+            throw unsupported();
+        }
+
+        @Override
+        public int findMainInventorySwordSlot() {
             throw unsupported();
         }
 
@@ -668,6 +702,21 @@ final class PlaneReplenishPureTest {
 
         @Override
         public FindItemResult findHotbarPickaxe() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult prepareUsablePickaxe() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult findHotbarSword() {
+            throw unsupported();
+        }
+
+        @Override
+        public FindItemResult prepareUsableSword() {
             throw unsupported();
         }
 

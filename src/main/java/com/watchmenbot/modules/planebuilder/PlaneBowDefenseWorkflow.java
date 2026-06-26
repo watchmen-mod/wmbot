@@ -4,16 +4,9 @@ import com.watchmenbot.util.WorkflowLogger;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
-import net.minecraft.util.math.Vec3d;
-
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 final class PlaneBowDefenseWorkflow {
-    private static final int AIM_SETTLE_TICKS = 3;
-    private static final int MAX_CHARGED_AIM_FAILURE_TICKS = 30;
-    private static final int AIM_FAILURE_SUPPRESSION_TICKS = 60;
+    private static final int MAX_AIM_WAIT_TICKS = 30;
     private static final int LOG_THROTTLE_TICKS = 20;
 
     private final MinecraftClient mc = MinecraftClient.getInstance();
@@ -24,14 +17,12 @@ final class PlaneBowDefenseWorkflow {
     private final PlaneBowShotSimulator shotSimulator = new PlaneBowShotSimulator();
     private final PlaneBowModuleSession moduleSession = new PlaneBowModuleSession();
     private final PlaneBowUseActions useActions = new PlaneBowUseActions();
-    private final PlaneActionExecutor aimActions;
     private final WorkflowLogger logger;
 
     private State state = State.IDLE;
     private int chargeTicks;
     private int aimWaitTicks;
     private int lockedTargetId = -1;
-    private final Map<Integer, Integer> suppressedTargetTicks = new HashMap<>();
     private int logThrottleTicks;
 
     PlaneBowDefenseWorkflow(
@@ -63,7 +54,6 @@ final class PlaneBowDefenseWorkflow {
         this.settings = settings;
         this.guards = guards;
         this.inventory = inventory;
-        aimActions = new PlaneActionExecutor(config, endermanLookSafety);
         this.logger = logger;
     }
 
@@ -93,12 +83,7 @@ final class PlaneBowDefenseWorkflow {
             return new BowDefenseTickResult(false);
         }
 
-        maintainSuppression(true);
-
-        Entity target = targeting.nearestSafeBowTarget(
-            settings.range().get(),
-            suppressedTargetTicks.keySet()
-        );
+        Entity target = targeting.nearestSafeBowTarget(settings.range().get());
         FindItemResult bow = target == null ? inventory.findHotbarBow() : inventory.prepareUsableBow();
         boolean canRun = PlaneBowDefenseDecisions.canRun(
             settings.enabled().get(),
@@ -125,12 +110,7 @@ final class PlaneBowDefenseWorkflow {
     boolean hasSafetyOpportunity(boolean replenishActive) {
         if (!guards.clientReady()) return false;
 
-        maintainSuppression(false);
-
-        Entity target = targeting.nearestSafeBowTarget(
-            settings.range().get(),
-            suppressedTargetTicks.keySet()
-        );
+        Entity target = targeting.nearestSafeBowTarget(settings.range().get());
         return PlaneBowDefenseDecisions.canRun(
             settings.enabled().get(),
             replenishActive,
@@ -143,7 +123,6 @@ final class PlaneBowDefenseWorkflow {
 
     void reset() {
         stop();
-        suppressedTargetTicks.clear();
         logThrottleTicks = 0;
     }
 
@@ -181,20 +160,9 @@ final class PlaneBowDefenseWorkflow {
             return false;
         }
 
-        nudgeAim(target);
         useActions.holdUse();
         chargeTicks++;
         if (chargeTicks < settings.chargeTicks().get()) return true;
-
-        aimWaitTicks++;
-        if (!PlaneBowDefenseDecisions.shouldCheckDirectHit(
-            chargeTicks,
-            settings.chargeTicks().get(),
-            aimWaitTicks,
-            AIM_SETTLE_TICKS
-        )) {
-            return true;
-        }
 
         boolean directHit = shotSimulator.simulatedFirstHitIsTarget(target);
         if (PlaneBowDefenseDecisions.shouldRelease(chargeTicks, settings.chargeTicks().get(), directHit)) {
@@ -204,44 +172,15 @@ final class PlaneBowDefenseWorkflow {
             return true;
         }
 
-        if (PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(aimWaitTicks - AIM_SETTLE_TICKS, MAX_CHARGED_AIM_FAILURE_TICKS)) {
-            int targetId = lockedTargetId;
+        aimWaitTicks++;
+        if (PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(aimWaitTicks, MAX_AIM_WAIT_TICKS)) {
             String targetName = target.getName().getString();
             stopShot(moduleSession.passiveLatched());
-            suppressTarget(targetId);
-            logInfo("Bow defense suppressed %s for %d ticks after charged aim timeout.", targetName, AIM_FAILURE_SUPPRESSION_TICKS);
+            logInfo("Bow defense cancelled shot at %s after aim timeout.", targetName);
             return false;
         }
 
         return true;
-    }
-
-    private void maintainSuppression(boolean advanceCooldown) {
-        if (suppressedTargetTicks.isEmpty()) return;
-
-        Iterator<Map.Entry<Integer, Integer>> iterator = suppressedTargetTicks.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Integer, Integer> entry = iterator.next();
-            Entity suppressed = targeting.lockedTarget(entry.getKey());
-            boolean targetSafe = targeting.safeBowTarget(suppressed, settings.range().get());
-            int ticksRemaining = entry.getValue();
-            if (PlaneBowDefenseDecisions.shouldClearSuppression(ticksRemaining, targetSafe)) {
-                iterator.remove();
-                continue;
-            }
-
-            if (advanceCooldown) entry.setValue(ticksRemaining - 1);
-        }
-    }
-
-    private void suppressTarget(int targetId) {
-        suppressedTargetTicks.put(targetId, AIM_FAILURE_SUPPRESSION_TICKS);
-    }
-
-    private void nudgeAim(Entity target) {
-        Vec3d aimPoint = target.getPos().add(0.0, target.getHeight() * 0.5, 0.0);
-        aimActions.rotate(aimPoint, () -> {
-        });
     }
 
     private void stop() {

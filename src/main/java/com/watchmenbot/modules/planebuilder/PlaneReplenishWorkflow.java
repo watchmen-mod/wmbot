@@ -2,6 +2,8 @@ package com.watchmenbot.modules.planebuilder;
 
 import com.watchmenbot.util.WorkflowLogger;
 
+import meteordevelopment.meteorclient.utils.player.FindItemResult;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -17,6 +19,7 @@ final class PlaneReplenishWorkflow {
     private final Map<Phase, PlaneReplenishTransition> transitions;
 
     private Phase phase = Phase.IDLE;
+    private Phase missingPickaxeReturnPhase;
 
     PlaneReplenishWorkflow(
         PlaneInventory inventory,
@@ -161,12 +164,15 @@ final class PlaneReplenishWorkflow {
             cleanup::dropTrashOffEdge,
             cleanup::waitForTrashToFall,
             this::recoverMissingEnderChest,
-            this::recoverMissingObsidian
+            managedShulkers::recoverMissingEnderChestShulker,
+            this::recoverMissingObsidian,
+            this::recoverMissingPickaxe
         );
     }
 
     void reset() {
         phase = Phase.IDLE;
+        missingPickaxeReturnPhase = null;
         serviceHole.reset();
         enderChestFarm.resetFarmProgress();
         managedShulkers.reset();
@@ -216,6 +222,7 @@ final class PlaneReplenishWorkflow {
         enderChestFarm.resetFarmProgress();
         refillPhases.beginReplenishCycle();
         cleanup.beginCleanupCycle();
+        missingPickaxeReturnPhase = null;
         phase = Phase.SELECTING_SERVICE_HOLE;
     }
 
@@ -228,6 +235,9 @@ final class PlaneReplenishWorkflow {
 
         PlaneReplenishTransition transition = transitions.get(phase);
         phase = transition == null ? phase : transition.next();
+        if (phase == Phase.MISSING_PICKAXE && previousPhase != Phase.MISSING_PICKAXE) {
+            missingPickaxeReturnPhase = previousPhase;
+        }
         if (previousPhase == Phase.BREAKING_ENDER_CHEST && phase != Phase.BREAKING_ENDER_CHEST) {
             enderChestFarm.reset();
         }
@@ -261,6 +271,19 @@ final class PlaneReplenishWorkflow {
         if (recovery == Phase.CLOSING_SERVICE_HOLE) return closeServiceHole();
 
         return recovery;
+    }
+
+    private Phase recoverMissingPickaxe() {
+        Phase recovery = missingPickaxeRecoveryPhase(inventory.prepareUsablePickaxe(), missingPickaxeReturnPhase);
+        if (recovery != Phase.MISSING_PICKAXE) missingPickaxeReturnPhase = null;
+
+        return recovery;
+    }
+
+    static Phase missingPickaxeRecoveryPhase(FindItemResult pickaxe, Phase returnPhase) {
+        if (pickaxe == null || !pickaxe.isHotbar()) return Phase.MISSING_PICKAXE;
+
+        return returnPhase == null ? Phase.SELECTING_SERVICE_HOLE : returnPhase;
     }
 
     private Phase recoverMissingEnderChest() {

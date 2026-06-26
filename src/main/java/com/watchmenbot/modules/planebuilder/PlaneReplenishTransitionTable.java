@@ -21,6 +21,7 @@ final class PlaneReplenishTransitionTable {
         Phase.TAKING_ENDER_CHESTS_FROM_SHULKER,
         Phase.BREAKING_ENDER_CHEST_SHULKER,
         Phase.MISSING_ENDER_CHEST,
+        Phase.MISSING_ENDER_CHEST_SHULKER,
         Phase.CLOSING_SERVICE_HOLE_FOR_KITBOT_REFILL,
         Phase.WAITING_FOR_KITBOT_REFILL,
         Phase.PICKING_UP_KITBOT_REFILL,
@@ -30,7 +31,8 @@ final class PlaneReplenishTransitionTable {
         Phase.DROPPING_TRASH_OFF_EDGE,
         Phase.WAITING_FOR_TRASH_TO_FALL,
         Phase.SERVICE_HOLE_BLOCKED,
-        Phase.MISSING_OBSIDIAN
+        Phase.MISSING_OBSIDIAN,
+        Phase.MISSING_PICKAXE
     );
 
     private PlaneReplenishTransitionTable() {
@@ -53,7 +55,9 @@ final class PlaneReplenishTransitionTable {
         PlaneReplenishTransition dropTrashOffEdge,
         PlaneReplenishTransition waitForTrashToFall,
         PlaneReplenishTransition recoverMissingEnderChest,
-        PlaneReplenishTransition recoverMissingObsidian
+        PlaneReplenishTransition recoverMissingEnderChestShulker,
+        PlaneReplenishTransition recoverMissingObsidian,
+        PlaneReplenishTransition recoverMissingPickaxe
     ) {
         Map<Phase, PlaneReplenishTransition> transitions = new EnumMap<>(Phase.class);
         transitions.put(Phase.SELECTING_SERVICE_HOLE, serviceHoles::select);
@@ -70,6 +74,7 @@ final class PlaneReplenishTransitionTable {
         transitions.put(Phase.TAKING_ENDER_CHESTS_FROM_SHULKER, takeEnderChestsFromShulker);
         transitions.put(Phase.BREAKING_ENDER_CHEST_SHULKER, breakEnderChestShulker);
         transitions.put(Phase.MISSING_ENDER_CHEST, recoverMissingEnderChest);
+        transitions.put(Phase.MISSING_ENDER_CHEST_SHULKER, recoverMissingEnderChestShulker);
         transitions.put(Phase.CLOSING_SERVICE_HOLE_FOR_KITBOT_REFILL, closeServiceHoleForKitbotRefill);
         transitions.put(Phase.WAITING_FOR_KITBOT_REFILL, waitForKitbotRefill);
         transitions.put(Phase.PICKING_UP_KITBOT_REFILL, pickUpKitbotRefill);
@@ -80,6 +85,7 @@ final class PlaneReplenishTransitionTable {
         transitions.put(Phase.WAITING_FOR_TRASH_TO_FALL, waitForTrashToFall);
         transitions.put(Phase.SERVICE_HOLE_BLOCKED, serviceHoles::recoverBlocked);
         transitions.put(Phase.MISSING_OBSIDIAN, recoverMissingObsidian);
+        transitions.put(Phase.MISSING_PICKAXE, recoverMissingPickaxe);
         return transitions;
     }
 

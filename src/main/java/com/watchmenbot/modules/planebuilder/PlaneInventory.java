@@ -65,6 +65,11 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     }
 
     @Override
+    public boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+        return view.hasInventorySpaceForEnderChestPreservingShulkerSlot();
+    }
+
+    @Override
     public FindItemResult findHotbarBuildBlock() {
         return InvUtils.findInHotbar(this::isBuildBlockStack);
     }
@@ -103,6 +108,18 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     @Override
     public FindItemResult prepareUsableBow() {
         return preparation.prepareUsableBow();
+    }
+
+    @Override
+    public FindItemResult findHotbarSword() {
+        FindItemResult result = InvUtils.findInHotbar(view::isUsableSwordStack);
+
+        return result.isHotbar() ? result : null;
+    }
+
+    @Override
+    public FindItemResult prepareUsableSword() {
+        return preparation.prepareUsableSword();
     }
 
     @Override
@@ -208,6 +225,11 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     @Override
     public int findMainInventoryBowSlot() {
         return view.findMainInventoryBowSlot();
+    }
+
+    @Override
+    public int findMainInventorySwordSlot() {
+        return view.findMainInventorySwordSlot();
     }
 
     @Override

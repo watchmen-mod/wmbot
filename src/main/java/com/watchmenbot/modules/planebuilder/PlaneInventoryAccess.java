@@ -16,6 +16,8 @@ interface PlaneInventoryAccess {
 
     boolean hasInventorySpaceForEnderChest();
 
+    boolean hasInventorySpaceForEnderChestPreservingShulkerSlot();
+
     FindItemResult findHotbarBuildBlock();
 
     FindItemResult findEnderChest();
@@ -37,6 +39,8 @@ interface PlaneInventoryAccess {
     int findMainInventoryPickaxeSlot();
 
     int findMainInventoryBowSlot();
+
+    int findMainInventorySwordSlot();
 
     boolean hasAnyEnderChestShulker();
 
@@ -61,4 +65,10 @@ interface PlaneInventoryAccess {
     boolean isEnderChestSupplyStack(ItemStack stack);
 
     FindItemResult findHotbarPickaxe();
+
+    FindItemResult prepareUsablePickaxe();
+
+    FindItemResult findHotbarSword();
+
+    FindItemResult prepareUsableSword();
 }

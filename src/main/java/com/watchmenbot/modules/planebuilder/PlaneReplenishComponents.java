@@ -164,7 +164,8 @@ record PlaneReplenishComponents(
             Phase.BREAKING_ENDER_CHEST_SHULKER,
             Phase.MISSING_ENDER_CHEST_SHULKER,
             PlanePickupSettings.REPLENISH_CLEANUP_GRACE_TICKS,
-            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS
+            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS,
+            true
         );
         PlaneDroppedItemPickupWorkflow<ItemEntity> missingShulkerPickup = new PlaneDroppedItemPickupWorkflow<>(
             dropDetector::nearestShulkerDrop,
@@ -174,7 +175,8 @@ record PlaneReplenishComponents(
             Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
             Phase.MISSING_ENDER_CHEST_SHULKER,
             PlanePickupSettings.REPLENISH_CLEANUP_GRACE_TICKS,
-            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS
+            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS,
+            true
         );
         PlaneTrashEdgeWorkflow trashCleanup = new PlaneTrashEdgeWorkflow(
             inventory,

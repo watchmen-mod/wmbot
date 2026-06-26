@@ -122,6 +122,31 @@ final class PlaneInventoryView {
         return anyMatching(stack -> stack.isEmpty() || (stack.isOf(Items.ENDER_CHEST) && stack.getCount() < stack.getMaxCount()));
     }
 
+    boolean hasInventorySpaceForEnderChestPreservingShulkerSlot() {
+        int emptySlots = 0;
+        boolean partialEnderChestStack = false;
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 0; slot < inventorySlots; slot++) {
+            ItemStack stack = context.player().getInventory().getStack(slot);
+            if (stack.isEmpty()) {
+                emptySlots++;
+            }
+            else if (stack.isOf(Items.ENDER_CHEST) && stack.getCount() < stack.getMaxCount()) {
+                partialEnderChestStack = true;
+            }
+        }
+
+        ItemStack offhand = context.player().getOffHandStack();
+        if (offhand.isEmpty()) {
+            emptySlots++;
+        }
+        else if (offhand.isOf(Items.ENDER_CHEST) && offhand.getCount() < offhand.getMaxCount()) {
+            partialEnderChestStack = true;
+        }
+
+        return PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(partialEnderChestStack, emptySlots);
+    }
+
     boolean hasInventorySpaceForCleanupDrop(ItemStack dropStack) {
         return PlaneInventoryQueries.cleanupDropPickupable(
             isBuildBlockStack(dropStack),
@@ -234,6 +259,15 @@ final class PlaneInventoryView {
         return -1;
     }
 
+    int findMainInventorySwordSlot() {
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 9; slot < inventorySlots; slot++) {
+            if (isUsableSwordStack(context.player().getInventory().getStack(slot))) return slot;
+        }
+
+        return -1;
+    }
+
     int findTrashSlot() {
         int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
         for (int slot = 0; slot < inventorySlots; slot++) {
@@ -275,6 +309,10 @@ final class PlaneInventoryView {
 
     boolean isUsableBowStack(ItemStack stack) {
         return PlaneItemClassifier.isUsableBowStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
+    }
+
+    boolean isUsableSwordStack(ItemStack stack) {
+        return PlaneItemClassifier.isUsableSwordStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
     }
 
     int countEnderChestsInShulker(ItemStack stack) {

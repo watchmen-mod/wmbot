@@ -35,6 +35,11 @@ final class PlaneInventoryQueries {
         return false;
     }
 
+    static boolean enderChestPickupPreservesShulkerSlot(boolean partialEnderChestStack, int emptySlots) {
+        if (emptySlots <= 0) return false;
+        return partialEnderChestStack || emptySlots >= 2;
+    }
+
     static int bestEnderChestShulkerHotbarSlot(int[] enderChestCountsBySlot) {
         int bestSlot = -1;
         int bestEnderChestCount = Integer.MAX_VALUE;

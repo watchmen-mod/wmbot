@@ -11,6 +11,7 @@ import net.minecraft.registry.Registries;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 final class KillAuraCompanionSettings {
     static final int MAX_TARGETS = 5;
@@ -47,9 +48,28 @@ final class KillAuraCompanionSettings {
 
         for (EntityType<?> entityType : Registries.ENTITY_TYPE) {
             if (!isMobGroup(entityType.getSpawnGroup())) continue;
-            if (!EntityUtils.isAttackable(entityType)) continue;
-            if (entityType == EntityType.PLAYER) continue;
-            if (entityType == EntityType.ENDERMAN) continue;
+            if (!isAllowedMobEntity(
+                EntityUtils.isAttackable(entityType),
+                entityType == EntityType.PLAYER,
+                entityType == EntityType.ENDERMAN
+            )) continue;
+
+            entities.add(entityType);
+        }
+
+        return entities;
+    }
+
+    static Set<EntityType<?>> hostileEntities() {
+        Set<EntityType<?>> entities = new HashSet<>();
+
+        for (EntityType<?> entityType : Registries.ENTITY_TYPE) {
+            if (!isHostileMobGroup(entityType.getSpawnGroup())) continue;
+            if (!isAllowedMobEntity(
+                EntityUtils.isAttackable(entityType),
+                entityType == EntityType.PLAYER,
+                entityType == EntityType.ENDERMAN
+            )) continue;
 
             entities.add(entityType);
         }
@@ -65,6 +85,18 @@ final class KillAuraCompanionSettings {
             || group == SpawnGroup.WATER_AMBIENT
             || group == SpawnGroup.UNDERGROUND_WATER_CREATURE
             || group == SpawnGroup.AXOLOTLS;
+    }
+
+    static boolean isHostileMobGroup(SpawnGroup group) {
+        return group == SpawnGroup.MONSTER;
+    }
+
+    static boolean isAllowedMobEntity(boolean attackable, boolean player, boolean enderman) {
+        return attackable && !player && !enderman;
+    }
+
+    static boolean isAggroedOnBot(boolean targetingBot, UUID angryAt, UUID botUuid) {
+        return targetingBot || (angryAt != null && angryAt.equals(botUuid));
     }
 
     private static CompanionModuleManager.SettingSnapshot snapshot(KillAura killAura, String name) {

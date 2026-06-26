@@ -14,6 +14,7 @@ final class PlaneReplenishCleanupPureTest {
         exitsPickupWhenCleanupDropCannotFit();
         matchesReplenishCleanupStacks();
         plansCleanupDropPickupCapacity();
+        plansEnderChestPickupCapacityWithReservedShulkerSlot();
         matchesTrashStacks();
         tracksTrashDropWait();
         plansTrashFallWaitDecisions();
@@ -184,6 +185,25 @@ final class PlaneReplenishCleanupPureTest {
         assertFalse(
             PlaneInventoryQueries.cleanupDropPickupable(false, false, true, true),
             "unrelated drop is not treated as pickupable cleanup"
+        );
+    }
+
+    private static void plansEnderChestPickupCapacityWithReservedShulkerSlot() {
+        assertTrue(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(true, 1),
+            "partial ender chest stack accepts pickup while preserving one shulker slot"
+        );
+        assertTrue(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(false, 2),
+            "two empty slots allow one ender chest pickup and one reserved shulker slot"
+        );
+        assertFalse(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(false, 1),
+            "only empty slot is reserved for the shulker drop"
+        );
+        assertFalse(
+            PlaneInventoryQueries.enderChestPickupPreservesShulkerSlot(true, 0),
+            "full inventory cannot preserve a shulker pickup slot"
         );
     }
 

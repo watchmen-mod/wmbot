@@ -12,6 +12,7 @@ final class PlaneDroppedItemPickupWorkflow<T> {
     private final Phase fallbackPhase;
     private final int noTargetGraceTicks;
     private final int maxTargetTicks;
+    private final boolean waitForPickupableTarget;
 
     private T pickupTarget;
     private int noTargetTicks;
@@ -50,6 +51,20 @@ final class PlaneDroppedItemPickupWorkflow<T> {
         int noTargetGraceTicks,
         int maxTargetTicks
     ) {
+        this(targetSupplier, targetPredicate, targetPickupable, pickupNavigator, activePhase, fallbackPhase, noTargetGraceTicks, maxTargetTicks, false);
+    }
+
+    PlaneDroppedItemPickupWorkflow(
+        Supplier<T> targetSupplier,
+        Predicate<T> targetPredicate,
+        Predicate<T> targetPickupable,
+        Navigator<T> pickupNavigator,
+        Phase activePhase,
+        Phase fallbackPhase,
+        int noTargetGraceTicks,
+        int maxTargetTicks,
+        boolean waitForPickupableTarget
+    ) {
         this.targetSupplier = targetSupplier;
         this.targetPredicate = targetPredicate;
         this.targetPickupable = targetPickupable;
@@ -58,6 +73,7 @@ final class PlaneDroppedItemPickupWorkflow<T> {
         this.fallbackPhase = fallbackPhase;
         this.noTargetGraceTicks = Math.max(0, noTargetGraceTicks);
         this.maxTargetTicks = maxTargetTicks;
+        this.waitForPickupableTarget = waitForPickupableTarget;
     }
 
     void reset() {
@@ -69,7 +85,7 @@ final class PlaneDroppedItemPickupWorkflow<T> {
 
     boolean hasTarget() {
         T target = acquireTarget();
-        return target != null && targetPickupable.test(target);
+        return target != null && (waitForPickupableTarget || targetPickupable.test(target));
     }
 
     Phase tick() {
@@ -88,10 +104,19 @@ final class PlaneDroppedItemPickupWorkflow<T> {
 
         if (!targetPickupable.test(target)) {
             pickupNavigator.stop();
-            pickupTarget = null;
             noTargetTicks = 0;
-            targetTicks = 0;
-            return fallbackPhase;
+            if (!waitForPickupableTarget) {
+                pickupTarget = null;
+                targetTicks = 0;
+                return fallbackPhase;
+            }
+            if (maxTargetTicks >= 0 && targetTicks >= maxTargetTicks) {
+                reset();
+                return fallbackPhase;
+            }
+
+            targetTicks++;
+            return activePhase;
         }
 
         noTargetTicks = 0;
