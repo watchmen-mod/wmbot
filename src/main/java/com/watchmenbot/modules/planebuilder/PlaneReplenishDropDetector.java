@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.planebuilder;
 
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.item.Items;
 import net.minecraft.item.ItemStack;
 
 final class PlaneReplenishDropDetector {
@@ -14,6 +15,15 @@ final class PlaneReplenishDropDetector {
 
     ItemEntity nearestCleanupDrop() {
         return cleanupScanner.nearestMatchingDrop();
+    }
+
+    int nearbyObsidianDropCount() {
+        return cleanupScanner.matchingDrops()
+            .stream()
+            .map(ItemEntity::getStack)
+            .filter(stack -> stack.isOf(Items.OBSIDIAN))
+            .mapToInt(ItemStack::getCount)
+            .sum();
     }
 
     ItemEntity nearestShulkerDrop() {

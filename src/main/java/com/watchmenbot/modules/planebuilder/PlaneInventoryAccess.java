@@ -10,6 +10,12 @@ interface PlaneInventoryAccess {
 
     int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace);
 
+    int effectiveReplenishTarget(
+        int configuredTarget,
+        boolean useAvailableSafeInventorySpace,
+        boolean reserveManagedShulkerSlot
+    );
+
     int requiredEnderChestsForTarget(int targetBuildBlocks);
 
     int countLooseEnderChests();

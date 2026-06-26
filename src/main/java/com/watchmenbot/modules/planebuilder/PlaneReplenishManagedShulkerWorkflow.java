@@ -19,7 +19,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
     private final PlaneDroppedItemPickupWorkflow<ItemEntity> missingShulkerPickup;
     private final WorkflowLogger logger;
     private final Supplier<Phase> currentPhase;
-    private final ManagedEnderChestShulkerState managedShulker = new ManagedEnderChestShulkerState();
+    private final ManagedEnderChestShulkerState managedShulker;
     private BlockPos lastServiceHoleExitTarget;
     private int serviceHoleExitLogTicks;
     private int managedShulkerRecoveryLogTicks;
@@ -35,6 +35,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
         ServiceHoleExitWorkflow serviceHoleExit,
         PlaneDroppedItemPickupWorkflow<ItemEntity> managedShulkerRecovery,
         PlaneDroppedItemPickupWorkflow<ItemEntity> missingShulkerPickup,
+        ManagedEnderChestShulkerState managedShulker,
         WorkflowLogger logger,
         Supplier<Phase> currentPhase
     ) {
@@ -48,12 +49,22 @@ final class PlaneReplenishManagedShulkerWorkflow {
         this.serviceHoleExit = serviceHoleExit;
         this.managedShulkerRecovery = managedShulkerRecovery;
         this.missingShulkerPickup = missingShulkerPickup;
+        this.managedShulker = managedShulker == null ? new ManagedEnderChestShulkerState() : managedShulker;
         this.logger = logger;
         this.currentPhase = currentPhase;
     }
 
     void reset() {
         managedShulker.reset();
+        resetTransientRecovery();
+    }
+
+    void resetForServiceHoleClose() {
+        if (!managedShulker.postBreakRecovery()) managedShulker.reset();
+        resetTransientRecovery();
+    }
+
+    private void resetTransientRecovery() {
         managedShulkerRecovery.reset();
         missingShulkerPickup.reset();
         serviceHoleExit.reset();
@@ -102,10 +113,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
     Phase breakEnderChestShulker() {
         boolean wasManagedPlaced = managedShulker.placedAt(serviceHole.hole(), serviceHole.status());
         Phase next = shulkerExtractor.breakPlacedShulker(serviceHole);
-        if (next == Phase.PLACING_ENDER_CHEST || next == Phase.CLOSING_SERVICE_HOLE) {
-            reset();
-        }
-        else if (wasManagedPlaced) markManagedOrPostBreak(true, next);
+        if (wasManagedPlaced) markManagedOrPostBreak(true, next);
         else {
             markManagedShulkerIfPlaced();
         }
@@ -117,6 +125,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
         EnderChestShulkerSourceScan scan = inventory.scanEnderChestShulkerSources();
         if (scan.hasVisibleSource()) {
             missingShulkerPickup.reset();
+            managedShulker.markRecovered();
             return Phase.PLACING_ENDER_CHEST_SHULKER;
         }
 
@@ -130,6 +139,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
         EnderChestShulkerSourceScan scan = inventory.scanEnderChestShulkerSources();
         if (scan.hasVisibleSource()) {
             missingShulkerPickup.reset();
+            managedShulker.markRecovered();
             return Phase.PLACING_ENDER_CHEST_SHULKER;
         }
 
@@ -189,7 +199,8 @@ final class PlaneReplenishManagedShulkerWorkflow {
             }
 
             if (!shouldRecoverManagedShulkerDrop(managedShulker.failedBeforeOpenRecovery(), looseEnderChests, visibleShulkerSource)) {
-                managedShulker.clearPostBreakRecovery();
+                if (visibleShulkerSource) managedShulker.markRecovered();
+                else managedShulker.clearPostBreakRecovery();
                 managedShulkerRecovery.reset();
                 managedShulkerRecoveryLogTicks = 0;
                 return kitbotRefill.missingSupplyPhase(next, false);
@@ -216,6 +227,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
         );
         if (recoveredSupply != next) {
             missingShulkerPickup.reset();
+            if (scan.hasVisibleSource()) managedShulker.markRecovered();
             return recoveredSupply;
         }
 
@@ -233,7 +245,7 @@ final class PlaneReplenishManagedShulkerWorkflow {
         if (status == ServiceHoleContext.Status.READY_SHULKER) {
             managedShulker.markPlaced(serviceHole.hole());
         }
-        else if (wasManaged && status == ServiceHoleContext.Status.READY_REPLACEABLE && missingSupplyPhase(next)) {
+        else if (wasManaged && status == ServiceHoleContext.Status.READY_REPLACEABLE) {
             managedShulker.markPostBreakRecovery();
         }
     }

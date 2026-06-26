@@ -8,6 +8,9 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 
+import java.util.function.BooleanSupplier;
+import java.util.function.IntSupplier;
+
 final class EnderChestShulkerExtractor {
     private final PlaneInventory inventory;
     private final PlanePlacement placement;
@@ -20,6 +23,8 @@ final class EnderChestShulkerExtractor {
     private final PlaneBuilderSettings.Replenish replenishSettings;
     private final WorkflowLogger logger;
     private final EnderChestFarmProgress farmProgress;
+    private final BooleanSupplier reserveManagedShulkerSlot;
+    private final IntSupplier visibleDroppedObsidian;
 
     EnderChestShulkerExtractor(
         PlaneInventory inventory,
@@ -64,6 +69,57 @@ final class EnderChestShulkerExtractor {
         WorkflowLogger logger,
         EnderChestFarmProgress farmProgress
     ) {
+        this(
+            inventory,
+            placement,
+            guards,
+            actions,
+            replenishSettings,
+            endermanLookSafety,
+            logger,
+            farmProgress,
+            () -> false,
+            () -> 0
+        );
+    }
+
+    EnderChestShulkerExtractor(
+        PlaneInventory inventory,
+        PlanePlacement placement,
+        PlaneActionGuards guards,
+        PlaneWorldActions actions,
+        PlaneBuilderSettings.Replenish replenishSettings,
+        PlaneEndermanLookSafety endermanLookSafety,
+        WorkflowLogger logger,
+        EnderChestFarmProgress farmProgress,
+        BooleanSupplier reserveManagedShulkerSlot
+    ) {
+        this(
+            inventory,
+            placement,
+            guards,
+            actions,
+            replenishSettings,
+            endermanLookSafety,
+            logger,
+            farmProgress,
+            reserveManagedShulkerSlot,
+            () -> 0
+        );
+    }
+
+    EnderChestShulkerExtractor(
+        PlaneInventory inventory,
+        PlanePlacement placement,
+        PlaneActionGuards guards,
+        PlaneWorldActions actions,
+        PlaneBuilderSettings.Replenish replenishSettings,
+        PlaneEndermanLookSafety endermanLookSafety,
+        WorkflowLogger logger,
+        EnderChestFarmProgress farmProgress,
+        BooleanSupplier reserveManagedShulkerSlot,
+        IntSupplier visibleDroppedObsidian
+    ) {
         this.inventory = inventory;
         this.placement = placement;
         this.guards = guards;
@@ -71,6 +127,8 @@ final class EnderChestShulkerExtractor {
         this.replenishSettings = replenishSettings;
         this.logger = logger;
         this.farmProgress = farmProgress;
+        this.reserveManagedShulkerSlot = reserveManagedShulkerSlot == null ? () -> false : reserveManagedShulkerSlot;
+        this.visibleDroppedObsidian = visibleDroppedObsidian == null ? () -> 0 : visibleDroppedObsidian;
         actionExecutor = new PlaneActionExecutor(PlaneRuntimeConfig.DEFAULT, endermanLookSafety);
         screens = new ShulkerScreenInteractor(inventory, guards);
     }
@@ -120,7 +178,11 @@ final class EnderChestShulkerExtractor {
         }
 
         ensureExtractionBaseline();
-        int needed = farmProgress.additionalEnderChestsNeeded(inventory.countBuildBlock(), effectiveReplenishTarget());
+        int needed = farmProgress.safeAdditionalEnderChestsNeeded(
+            inventory.countBuildBlock(),
+            effectiveReplenishTarget(),
+            visibleDroppedObsidian.getAsInt()
+        );
         int currentLooseEnderChests = inventory.countLooseEnderChests();
         if (currentLooseEnderChests >= needed) {
             screens.close();
@@ -243,10 +305,19 @@ final class EnderChestShulkerExtractor {
     }
 
     private int effectiveReplenishTarget() {
-        return PlaneReplenishTargets.effectiveTarget(inventory, replenishSettings);
+        return PlaneReplenishTargets.effectiveTarget(
+            inventory,
+            replenishSettings.targetObsidian().get(),
+            replenishSettings.useAvailableSafeInventorySpace().get(),
+            reserveManagedShulkerSlot.getAsBoolean()
+        );
     }
 
     private boolean targetBuildBlockCountReached() {
-        return farmProgress.effectiveBuildBlocks(inventory.countBuildBlock()) >= effectiveReplenishTarget();
+        return !farmProgress.canFitAdditionalEnderChest(
+            inventory.countBuildBlock(),
+            effectiveReplenishTarget(),
+            visibleDroppedObsidian.getAsInt()
+        );
     }
 }

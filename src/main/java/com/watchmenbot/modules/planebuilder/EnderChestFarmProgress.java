@@ -17,19 +17,40 @@ final class EnderChestFarmProgress {
     }
 
     int effectiveBuildBlocks(int currentBuildBlocks) {
+        return effectiveBuildBlocks(currentBuildBlocks, 0);
+    }
+
+    int effectiveBuildBlocks(int currentBuildBlocks, int visibleDroppedObsidian) {
         reconcile(currentBuildBlocks);
-        return currentBuildBlocks + pendingFarmedObsidian;
+        return currentBuildBlocks + knownPendingObsidian(visibleDroppedObsidian);
     }
 
     int additionalEnderChestsNeeded(int currentBuildBlocks, int targetBuildBlocks) {
+        return additionalEnderChestsNeeded(currentBuildBlocks, targetBuildBlocks, 0);
+    }
+
+    int additionalEnderChestsNeeded(int currentBuildBlocks, int targetBuildBlocks, int visibleDroppedObsidian) {
         return PlaneInventoryQueries.additionalEnderChestsForTarget(
-            effectiveBuildBlocks(currentBuildBlocks),
+            effectiveBuildBlocks(currentBuildBlocks, visibleDroppedObsidian),
             targetBuildBlocks
         );
     }
 
+    int safeAdditionalEnderChestsNeeded(int currentBuildBlocks, int targetBuildBlocks, int visibleDroppedObsidian) {
+        int shortfall = Math.max(0, targetBuildBlocks - effectiveBuildBlocks(currentBuildBlocks, visibleDroppedObsidian));
+        return shortfall / OBSIDIAN_PER_ENDER_CHEST;
+    }
+
+    boolean canFitAdditionalEnderChest(int currentBuildBlocks, int targetBuildBlocks, int visibleDroppedObsidian) {
+        return safeAdditionalEnderChestsNeeded(currentBuildBlocks, targetBuildBlocks, visibleDroppedObsidian) > 0;
+    }
+
     int pendingFarmedObsidian() {
         return pendingFarmedObsidian;
+    }
+
+    int knownPendingObsidian(int visibleDroppedObsidian) {
+        return Math.max(pendingFarmedObsidian, Math.max(0, visibleDroppedObsidian));
     }
 
     private void reconcile(int currentBuildBlocks) {

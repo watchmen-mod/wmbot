@@ -37,6 +37,10 @@ final class PlaneInventoryView {
     }
 
     int safeBuildBlockCapacity() {
+        return safeBuildBlockCapacity(false);
+    }
+
+    int safeBuildBlockCapacity(boolean reserveManagedShulkerSlot) {
         int buildBlockMaxCount = config.buildBlock().asItem().getDefaultStack().getMaxCount();
         int currentBuildBlocks = 0;
         int partialBuildBlockRoom = 0;
@@ -78,7 +82,8 @@ final class PlaneInventoryView {
             buildBlockMaxCount,
             hasPartialLooseEnderChestStack,
             false,
-            true
+            true,
+            reserveManagedShulkerSlot
         );
         boolean shulkerSourceMayBeNeeded = shulkerScan.hasVisibleSource()
             && currentBuildBlocks + looseEnderChests * EnderChestFarmProgress.OBSIDIAN_PER_ENDER_CHEST < capacityWithoutShulkerReservation;
@@ -90,7 +95,8 @@ final class PlaneInventoryView {
             buildBlockMaxCount,
             hasPartialLooseEnderChestStack,
             shulkerSourceMayBeNeeded,
-            true
+            true,
+            reserveManagedShulkerSlot
         );
     }
 

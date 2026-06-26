@@ -15,7 +15,9 @@ record PlaneReplenishComponents(
     ServiceHoleExitWorkflow serviceHoleExit,
     PlaneDroppedItemPickupWorkflow<ItemEntity> dropCleanup,
     PlaneDroppedItemPickupWorkflow<ItemEntity> managedShulkerRecovery,
+    PlaneDroppedItemPickupWorkflow<ItemEntity> managedShulkerCleanup,
     PlaneDroppedItemPickupWorkflow<ItemEntity> missingShulkerPickup,
+    ManagedEnderChestShulkerState managedShulker,
     PlaneTrashEdgeWorkflow trashCleanup,
     PlaneRuntimeConfig config,
     WorkflowLogger logger
@@ -106,6 +108,8 @@ record PlaneReplenishComponents(
         ServiceHoleContext serviceHole = new ServiceHoleContext(scanner, config, context);
         ServiceHoleWorkflow serviceHoles = new ServiceHoleWorkflow(serviceHole, inventory, guards, actions);
         EnderChestFarmProgress farmProgress = new EnderChestFarmProgress();
+        ManagedEnderChestShulkerState managedShulker = new ManagedEnderChestShulkerState();
+        PlaneReplenishDropDetector dropDetector = new PlaneReplenishDropDetector();
         ServiceHoleExitWorkflow serviceHoleExit = new ServiceHoleExitWorkflow(
             new ServiceHoleExitPlanner(
                 config,
@@ -132,7 +136,9 @@ record PlaneReplenishComponents(
             actions,
             replenishSettings,
             logger,
-            farmProgress
+            farmProgress,
+            managedShulker::reservesInventorySlot,
+            dropDetector::nearbyObsidianDropCount
         );
         EnderChestShulkerExtractor shulkerExtractor = new EnderChestShulkerExtractor(
             inventory,
@@ -142,10 +148,17 @@ record PlaneReplenishComponents(
             replenishSettings,
             endermanLookSafety,
             logger,
-            farmProgress
+            farmProgress,
+            managedShulker::reservesInventorySlot,
+            dropDetector::nearbyObsidianDropCount
         );
-        PlaneKitbotRefillWorkflow kitbotRefill = new PlaneKitbotRefillWorkflow(kitbotRefillSettings, supply, inventory, replenishSettings);
-        PlaneReplenishDropDetector dropDetector = new PlaneReplenishDropDetector();
+        PlaneKitbotRefillWorkflow kitbotRefill = new PlaneKitbotRefillWorkflow(
+            kitbotRefillSettings,
+            supply,
+            inventory,
+            replenishSettings,
+            managedShulker::reservesInventorySlot
+        );
         PlaneDroppedItemPickupWorkflow<ItemEntity> dropCleanup = new PlaneDroppedItemPickupWorkflow<>(
             dropDetector::nearestCleanupDrop,
             dropDetector::matchesCleanupDrop,
@@ -163,6 +176,17 @@ record PlaneReplenishComponents(
             new PlaneItemPickupNavigator(endermanLookSafety),
             Phase.BREAKING_ENDER_CHEST_SHULKER,
             Phase.MISSING_ENDER_CHEST_SHULKER,
+            PlanePickupSettings.REPLENISH_CLEANUP_GRACE_TICKS,
+            PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS,
+            true
+        );
+        PlaneDroppedItemPickupWorkflow<ItemEntity> managedShulkerCleanup = new PlaneDroppedItemPickupWorkflow<>(
+            dropDetector::nearestShulkerDrop,
+            dropDetector::matchesShulkerDrop,
+            item -> inventory.hasInventorySpaceForCleanupDrop(item.getStack()),
+            new PlaneItemPickupNavigator(endermanLookSafety),
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.PICKING_UP_REPLENISH_DROPS,
             PlanePickupSettings.REPLENISH_CLEANUP_GRACE_TICKS,
             PlanePickupSettings.MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS,
             true
@@ -199,7 +223,9 @@ record PlaneReplenishComponents(
             serviceHoleExit,
             dropCleanup,
             managedShulkerRecovery,
+            managedShulkerCleanup,
             missingShulkerPickup,
+            managedShulker,
             trashCleanup,
             config,
             logger

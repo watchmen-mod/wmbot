@@ -131,7 +131,13 @@ final class PlaneReplenishWorkflow {
         enderChestFarm = components.enderChestFarm();
         PlaneKitbotRefillWorkflow kitbotRefill = components.kitbotRefill();
         refillPhases = new PlaneReplenishKitbotRefillPhaseWorkflow(serviceHoles, kitbotRefill);
-        cleanup = new PlaneReplenishCleanupWorkflow(components.dropCleanup(), components.trashCleanup());
+        cleanup = new PlaneReplenishCleanupWorkflow(
+            components.dropCleanup(),
+            components.managedShulkerCleanup(),
+            inventory,
+            components.managedShulker(),
+            components.trashCleanup()
+        );
         config = components.config();
         managedShulkers = new PlaneReplenishManagedShulkerWorkflow(
             context,
@@ -144,6 +150,7 @@ final class PlaneReplenishWorkflow {
             components.serviceHoleExit(),
             components.managedShulkerRecovery(),
             components.missingShulkerPickup(),
+            components.managedShulker(),
             components.logger(),
             this::phase
         );
@@ -256,7 +263,7 @@ final class PlaneReplenishWorkflow {
     }
 
     private Phase closeServiceHole() {
-        managedShulkers.reset();
+        managedShulkers.resetForServiceHoleClose();
         Phase next = PlaneReplenishDecisions.afterNormalServiceHoleClose(serviceHoles.close());
         if (next == Phase.PICKING_UP_REPLENISH_DROPS) cleanup.beginCleanupCycle();
         return next;

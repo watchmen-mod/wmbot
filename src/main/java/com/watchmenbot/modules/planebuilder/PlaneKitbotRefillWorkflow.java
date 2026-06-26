@@ -2,6 +2,7 @@ package com.watchmenbot.modules.planebuilder;
 
 import net.minecraft.entity.ItemEntity;
 
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 
 final class PlaneKitbotRefillWorkflow {
@@ -10,6 +11,7 @@ final class PlaneKitbotRefillWorkflow {
     private final PlaneKitbotDeliveryTracker delivery;
     private final PlaneKitbotTeleportAcceptWorkflow teleportAccept;
     private final IntSupplier requiredEnderChestSupply;
+    private final BooleanSupplier managedSupplyActive;
 
     private PlaneKitbotTeleportAcceptWorkflow.AcceptResult lastTeleportAcceptResult =
         new PlaneKitbotTeleportAcceptWorkflow.AcceptResult(PlaneKitbotTeleportAcceptWorkflow.AcceptStatus.IGNORED, null);
@@ -20,13 +22,29 @@ final class PlaneKitbotRefillWorkflow {
         PlaneInventory inventory,
         PlaneBuilderSettings.Replenish replenishSettings
     ) {
+        this(settings, supply, inventory, replenishSettings, () -> false);
+    }
+
+    PlaneKitbotRefillWorkflow(
+        PlaneBuilderSettings.KitbotRefill settings,
+        EnderChestSupplyInventory supply,
+        PlaneInventory inventory,
+        PlaneBuilderSettings.Replenish replenishSettings,
+        BooleanSupplier managedSupplyActive
+    ) {
         this(
             new PlaneKitbotMessenger(settings),
             supply,
             PlaneKitbotSupplyProbes.from(supply),
             PlaneKitbotDroppedSupplyTrackers.from(new PlaneKitbotDroppedSupplyDetector(), 0),
             null,
-            () -> inventory.requiredEnderChestsForTarget(PlaneReplenishTargets.effectiveTarget(inventory, replenishSettings))
+            () -> inventory.requiredEnderChestsForTarget(PlaneReplenishTargets.effectiveTarget(
+                inventory,
+                replenishSettings.targetObsidian().get(),
+                replenishSettings.useAvailableSafeInventorySpace().get(),
+                managedSupplyActive != null && managedSupplyActive.getAsBoolean()
+            )),
+            managedSupplyActive
         );
     }
 
@@ -84,11 +102,24 @@ final class PlaneKitbotRefillWorkflow {
         PlaneKitbotTeleportAcceptWorkflow teleportAccept,
         IntSupplier requiredEnderChestSupply
     ) {
+        this(messenger, supply, supplyProbe, droppedSupply, teleportAccept, requiredEnderChestSupply, () -> false);
+    }
+
+    PlaneKitbotRefillWorkflow(
+        PlaneKitbotMessenger messenger,
+        EnderChestSupplyInventory supply,
+        PlaneKitbotSupplyProbe supplyProbe,
+        PlaneKitbotDroppedSupplyTracker droppedSupply,
+        PlaneKitbotTeleportAcceptWorkflow teleportAccept,
+        IntSupplier requiredEnderChestSupply,
+        BooleanSupplier managedSupplyActive
+    ) {
         this.messenger = messenger;
         this.supplyProbe = supplyProbe == null ? PlaneKitbotSupplyProbes.from(supply) : supplyProbe;
         delivery = new PlaneKitbotDeliveryTracker(this.supplyProbe, droppedSupply);
         this.teleportAccept = teleportAccept == null ? new PlaneKitbotTeleportAcceptWorkflow(messenger) : teleportAccept;
         this.requiredEnderChestSupply = requiredEnderChestSupply == null ? () -> 1 : requiredEnderChestSupply;
+        this.managedSupplyActive = managedSupplyActive == null ? () -> false : managedSupplyActive;
     }
 
     void reset() {
@@ -141,7 +172,11 @@ final class PlaneKitbotRefillWorkflow {
             return Phase.SELECTING_REPLENISH_SOURCE;
         }
 
-        Phase refillPhase = PlaneKitbotRefillDecisions.missingSupplyPhase(messenger.enabled(), false, managedSupplyActive);
+        Phase refillPhase = PlaneKitbotRefillDecisions.missingSupplyPhase(
+            messenger.enabled(),
+            false,
+            managedSupplyActive || this.managedSupplyActive.getAsBoolean()
+        );
         if (refillPhase == Phase.CLOSING_SERVICE_HOLE_FOR_KITBOT_REFILL || refillPhase == Phase.SELECTING_REPLENISH_SOURCE) {
             return refillPhase;
         }
@@ -196,6 +231,7 @@ final class PlaneKitbotRefillWorkflow {
     }
 
     private Phase requestOrMissingSupply() {
+        if (managedSupplyActive.getAsBoolean()) return Phase.MISSING_ENDER_CHEST_SHULKER;
         if (!delivery.pending() && hasUsableSupply()) return Phase.SELECTING_REPLENISH_SOURCE;
 
         Phase phase = delivery.requestOrMissingSupply(messenger);

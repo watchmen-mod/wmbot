@@ -17,6 +17,15 @@ final class PlaneReplenishTargets {
         int configuredTarget,
         boolean useAvailableSafeInventorySpace
     ) {
-        return inventory.effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace);
+        return effectiveTarget(inventory, configuredTarget, useAvailableSafeInventorySpace, false);
+    }
+
+    static int effectiveTarget(
+        PlaneInventoryAccess inventory,
+        int configuredTarget,
+        boolean useAvailableSafeInventorySpace,
+        boolean reserveManagedShulkerSlot
+    ) {
+        return inventory.effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace, reserveManagedShulkerSlot);
     }
 }

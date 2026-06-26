@@ -39,7 +39,16 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
 
     @Override
     public int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace) {
-        int safeBuildBlockCapacity = useAvailableSafeInventorySpace ? view.safeBuildBlockCapacity() : 0;
+        return effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace, false);
+    }
+
+    @Override
+    public int effectiveReplenishTarget(
+        int configuredTarget,
+        boolean useAvailableSafeInventorySpace,
+        boolean reserveManagedShulkerSlot
+    ) {
+        int safeBuildBlockCapacity = useAvailableSafeInventorySpace ? view.safeBuildBlockCapacity(reserveManagedShulkerSlot) : 0;
         return PlaneReplenishTargetPolicy.effectiveTarget(
             configuredTarget,
             useAvailableSafeInventorySpace,

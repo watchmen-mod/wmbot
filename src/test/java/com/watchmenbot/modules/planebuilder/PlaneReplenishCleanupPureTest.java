@@ -11,6 +11,7 @@ final class PlaneReplenishCleanupPureTest {
     static void run() {
         plansReplenishDropCleanupTransitions();
         plansGenericDroppedItemPickupFallback();
+        prioritizesManagedShulkerPickupBeforeGenericCleanup();
         exitsPickupWhenCleanupDropCannotFit();
         matchesReplenishCleanupStacks();
         plansCleanupDropPickupCapacity();
@@ -97,6 +98,44 @@ final class PlaneReplenishCleanupPureTest {
         );
         assertEquals(2, timeoutNavigator.pathTicks, "timeout target paths only before fallback");
         assertEquals(1, timeoutNavigator.stopTicks, "timeout fallback stops navigator");
+    }
+
+    private static void prioritizesManagedShulkerPickupBeforeGenericCleanup() {
+        Object shulkerDrop = new Object();
+        Object obsidianDrop = new Object();
+        PlaneTestPickupNavigator shulkerNavigator = new PlaneTestPickupNavigator();
+        PlaneTestPickupNavigator obsidianNavigator = new PlaneTestPickupNavigator();
+        PlaneDroppedItemPickupWorkflow<Object> shulkerPickup = new PlaneDroppedItemPickupWorkflow<>(
+            () -> shulkerDrop,
+            item -> item == shulkerDrop,
+            item -> true,
+            shulkerNavigator,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            0,
+            10,
+            true
+        );
+        PlaneDroppedItemPickupWorkflow<Object> obsidianCleanup = new PlaneDroppedItemPickupWorkflow<>(
+            () -> obsidianDrop,
+            item -> item == obsidianDrop,
+            item -> true,
+            obsidianNavigator,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.MOVING_TO_TRASH_EDGE,
+            0,
+            10
+        );
+
+        Phase next = shulkerPickup.hasTarget() ? shulkerPickup.tick() : obsidianCleanup.tick();
+
+        assertEquals(
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            next,
+            "managed shulker pickup stays in cleanup phase"
+        );
+        assertEquals(1, shulkerNavigator.pathTicks, "managed shulker pickup paths first");
+        assertEquals(0, obsidianNavigator.pathTicks, "generic obsidian cleanup waits while managed shulker is available");
     }
 
     private static void exitsPickupWhenCleanupDropCannotFit() {

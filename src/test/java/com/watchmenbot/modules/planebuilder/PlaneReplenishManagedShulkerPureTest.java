@@ -74,14 +74,23 @@ final class PlaneReplenishManagedShulkerPureTest {
         assertTrue(state.placedAt(hole, ServiceHoleContext.Status.READY_SHULKER), "managed placed shulker is active in selected service hole");
         assertFalse(state.placedAt(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "replaceable hole is not placed shulker state");
         assertTrue(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_SHULKER), "managed placed shulker suppresses refill");
+        assertTrue(state.reservesInventorySlot(), "managed placed shulker reserves a return inventory slot");
 
         state.markPostBreakRecovery();
         assertFalse(state.placedAt(hole, ServiceHoleContext.Status.READY_SHULKER), "post-break recovery clears placed shulker block");
         assertTrue(state.postBreakRecovery(), "post-break recovery is tracked");
         assertTrue(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "post-break recovery suppresses refill");
+        assertTrue(state.reservesInventorySlot(), "post-break recovery keeps reserving the shulker return slot");
 
         state.clearPostBreakRecovery();
         assertFalse(state.suppressesRefill(hole, ServiceHoleContext.Status.READY_REPLACEABLE), "cleared post-break recovery allows refill decisions");
+        assertFalse(state.reservesInventorySlot(), "cleared post-break recovery releases the reserved shulker slot");
+
+        state.markPlaced(hole);
+        state.markPostBreakRecovery();
+        state.markRecovered();
+        assertFalse(state.postBreakRecovery(), "recovered managed shulker clears post-break recovery");
+        assertFalse(state.reservesInventorySlot(), "recovered managed shulker releases inventory reservation");
     }
 
     private static void tracksManagedShulkerFailedOpenRecovery() {

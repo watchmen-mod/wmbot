@@ -135,7 +135,6 @@ final class PlaneBowDefensePureTest {
     private static boolean passiveBowDefensePhase(Phase phase) {
         return phase == Phase.MISSING_OBSIDIAN
             || phase == Phase.SELECTING_SERVICE_HOLE
-            || phase == Phase.SERVICE_HOLE_OPEN
             || phase == Phase.SELECTING_REPLENISH_SOURCE
             || phase == Phase.SERVICE_HOLE_BLOCKED
             || phase == Phase.MISSING_ENDER_CHEST

@@ -121,6 +121,11 @@ final class PlaneReplenishPureTest {
         );
         assertEquals(
             64,
+            PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 3, 64, false, true, true, true),
+            "managed shulker return reserves an additional empty slot"
+        );
+        assertEquals(
+            64,
             PlaneReplenishTargetPolicy.safeBuildBlockCapacity(64, 0, 0, 64, true, false, false),
             "occupied non-obsidian slots do not add capacity"
         );
@@ -168,6 +173,8 @@ final class PlaneReplenishPureTest {
         assertEquals(80, progress.effectiveBuildBlocks(72), "picked up obsidian replaces matching pending obsidian without losing effective progress");
         assertEquals(8, progress.pendingFarmedObsidian(), "inventory pickup reconciles pending obsidian downward");
         assertEquals(1, progress.additionalEnderChestsNeeded(72, 88), "pending obsidian reduces shulker extraction need");
+        assertEquals(1, progress.safeAdditionalEnderChestsNeeded(72, 88, 0), "safe extraction allows one full ender chest when eight obsidian fits");
+        assertFalse(progress.canFitAdditionalEnderChest(72, 87, 0), "safe extraction refuses another ender chest when only seven obsidian fit");
 
         progress.recordFarmedEnderChest(72);
         assertEquals(0, progress.additionalEnderChestsNeeded(72, 88), "pending obsidian can fully cover target shortfall");
@@ -180,6 +187,8 @@ final class PlaneReplenishPureTest {
         progress.reset();
         assertEquals(0, progress.pendingFarmedObsidian(), "reset clears pending farm progress");
         assertEquals(64, progress.effectiveBuildBlocks(64), "reset returns effective blocks to inventory count");
+        assertEquals(80, progress.effectiveBuildBlocks(64, 16), "visible dropped obsidian restores effective progress after reset");
+        assertEquals(0, progress.safeAdditionalEnderChestsNeeded(64, 87, 16), "visible dropped obsidian prevents farming into partial remaining room");
     }
 
     private static void classifiesServiceHoleStatuses() {
@@ -492,7 +501,7 @@ final class PlaneReplenishPureTest {
         assertTrue(PlanePhasePolicy.replenishActive(Phase.MISSING_OBSIDIAN, true), "policy treats missing obsidian active after service-hole selection");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.MISSING_OBSIDIAN), "policy keeps bow defense during missing obsidian recovery");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SELECTING_SERVICE_HOLE), "policy keeps bow defense during service-hole selection");
-        assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_OPEN), "policy keeps bow defense while service hole is open");
+        assertFalse(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_OPEN), "policy keeps replenish ownership during the service-hole-open bridge");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SELECTING_REPLENISH_SOURCE), "policy keeps bow defense during passive source selection");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.SERVICE_HOLE_BLOCKED), "policy keeps bow defense during blocked service-hole wait");
         assertTrue(PlanePhasePolicy.shouldKeepBowDefenseDuringReplenish(Phase.MISSING_ENDER_CHEST), "policy keeps bow defense during missing ender chest wait");
@@ -561,6 +570,15 @@ final class PlaneReplenishPureTest {
 
         @Override
         public int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace) {
+            return effectiveReplenishTarget(configuredTarget, useAvailableSafeInventorySpace, false);
+        }
+
+        @Override
+        public int effectiveReplenishTarget(
+            int configuredTarget,
+            boolean useAvailableSafeInventorySpace,
+            boolean reserveManagedShulkerSlot
+        ) {
             lastUseAvailableSafeInventorySpace = useAvailableSafeInventorySpace;
             return useAvailableSafeInventorySpace ? safeTarget : manualTarget;
         }
