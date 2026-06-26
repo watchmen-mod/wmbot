@@ -1,5 +1,9 @@
 package com.watchmenbot.modules.planebuilder;
 
+import net.minecraft.util.math.BlockPos;
+
+import java.util.UUID;
+
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertEquals;
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertFalse;
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertTrue;
@@ -13,6 +17,7 @@ final class PlaneReplenishCleanupPureTest {
         plansGenericDroppedItemPickupFallback();
         prioritizesManagedShulkerPickupBeforeGenericCleanup();
         exitsPickupWhenCleanupDropCannotFit();
+        tracksPickupIdleNudgeRecovery();
         matchesReplenishCleanupStacks();
         plansCleanupDropPickupCapacity();
         plansEnderChestPickupCapacityWithReservedShulkerSlot();
@@ -179,6 +184,46 @@ final class PlaneReplenishCleanupPureTest {
         assertEquals(0, fullInventoryNavigator.pathTicks, "unpickupable target does not path");
         assertEquals(1, fullInventoryNavigator.stopTicks, "unpickupable target stops navigator");
         assertFalse(fullInventory.hasTarget(), "unpickupable target is cleared after fallback");
+    }
+
+    private static void tracksPickupIdleNudgeRecovery() {
+        PlaneItemPickupNavigator.PickupRecovery recovery = new PlaneItemPickupNavigator.PickupRecovery(2, 4);
+        UUID firstTarget = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondTarget = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        BlockPos firstPos = new BlockPos(10, 64, 10);
+        BlockPos secondPos = new BlockPos(11, 64, 10);
+
+        assertTrue(recovery.observeTarget(firstTarget, firstPos), "first pickup target resets recovery state");
+        assertFalse(recovery.recordIdleRepathAndShouldNudge(), "first same-target idle repath does not nudge");
+        assertEquals(1, recovery.idleRepaths(), "idle repath is counted before threshold");
+        assertTrue(recovery.recordIdleRepathAndShouldNudge(), "second same-target idle repath starts nudge");
+        assertEquals(4, recovery.nudgeTicksRemaining(), "nudge starts with configured pulse length");
+        for (int i = 0; i < 4; i++) {
+            assertTrue(recovery.tickNudge(), "active pickup nudge tick " + i);
+        }
+        assertFalse(recovery.tickNudge(), "pickup nudge ends after configured pulse");
+        assertEquals(0, recovery.idleRepaths(), "completed nudge clears idle repath count");
+
+        recovery.recordIdleRepathAndShouldNudge();
+        recovery.pathingActive();
+        assertEquals(0, recovery.idleRepaths(), "active Baritone pathing clears idle repath recovery");
+        assertEquals(0, recovery.nudgeTicksRemaining(), "active Baritone pathing clears nudge pulse");
+
+        recovery.recordIdleRepathAndShouldNudge();
+        assertFalse(recovery.observeTarget(firstTarget, firstPos), "unchanged pickup target keeps recovery state");
+        assertEquals(1, recovery.idleRepaths(), "unchanged target preserves idle repath count");
+        assertTrue(recovery.observeTarget(firstTarget, secondPos), "pickup target position change resets recovery");
+        assertEquals(0, recovery.idleRepaths(), "position change clears idle repath count");
+        recovery.recordIdleRepathAndShouldNudge();
+        assertTrue(recovery.observeTarget(secondTarget, secondPos), "pickup target id change resets recovery");
+        assertEquals(0, recovery.idleRepaths(), "target id change clears idle repath count");
+
+        recovery.recordIdleRepathAndShouldNudge();
+        recovery.recordIdleRepathAndShouldNudge();
+        assertTrue(recovery.nudgeTicksRemaining() > 0, "reset scenario starts with active nudge");
+        recovery.reset();
+        assertEquals(0, recovery.idleRepaths(), "reset clears idle repath count");
+        assertEquals(0, recovery.nudgeTicksRemaining(), "reset clears active nudge");
     }
 
     private static void matchesReplenishCleanupStacks() {
