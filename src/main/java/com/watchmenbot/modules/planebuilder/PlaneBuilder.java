@@ -27,6 +27,7 @@ public class PlaneBuilder extends Module {
         PlaneBuilderSettings.companionModules(sgCompanionModules)
     );
     private final PlaneModuleIsolationSession moduleIsolation = new PlaneModuleIsolationSession();
+    private final PlaneNametagsTeardownGuard nametagsTeardownGuard = new PlaneNametagsTeardownGuard();
     private final PlaneBuilderCoordinator coordinator = new PlaneBuilderCoordinator(
         companionModules,
         PlaneBuilderSettings.replenish(sgReplenish),
@@ -77,6 +78,7 @@ public class PlaneBuilder extends Module {
         coordinator.reset();
         worldReadyTicks = 0;
         companionModules.restore();
+        nametagsTeardownGuard.restore();
         moduleIsolation.restore(this);
     }
 
@@ -129,6 +131,7 @@ public class PlaneBuilder extends Module {
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
+        nametagsTeardownGuard.suspend();
         coordinator.reset();
         worldReadyTicks = 0;
         companionModules.suspend();
@@ -136,6 +139,7 @@ public class PlaneBuilder extends Module {
 
     @EventHandler
     private void onGameJoined(GameJoinedEvent event) {
+        nametagsTeardownGuard.restore();
         worldReadyTicks = 0;
         if (isActive()) coordinator.startStatsSession(System.currentTimeMillis());
     }
@@ -179,6 +183,7 @@ public class PlaneBuilder extends Module {
     @EventHandler(priority = EventPriority.HIGHEST)
     private void onPreTick(TickEvent.Pre event) {
         if (mc.player == null || mc.world == null) {
+            nametagsTeardownGuard.suspend();
             coordinator.reset();
             worldReadyTicks = 0;
             companionModules.suspend();

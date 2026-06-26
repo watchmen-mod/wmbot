@@ -12,5 +12,6 @@ public final class PlaneBuilderPureTest {
         PlaneBuilderStatsPureTest.run();
         PlaneRefactorPureTest.run();
         PlaneModuleIsolationSessionPureTest.run();
+        PlaneNametagsTeardownGuardPureTest.run();
     }
 }
