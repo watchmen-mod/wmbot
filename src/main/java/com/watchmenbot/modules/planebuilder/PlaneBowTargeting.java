@@ -30,15 +30,18 @@ final class PlaneBowTargeting {
     }
 
     boolean safeBowTarget(Entity entity, double range) {
-        TargetFacts facts = targetFacts(entity);
-        if (facts == null) return false;
+        return bowTargetStatus(entity, range) == BowTargetStatus.READY;
+    }
 
-        return bowTargetPolicy(
-            facts.distance(),
-            range,
-            facts.visible(),
-            facts.aggroedOnBot()
-        );
+    BowTargetStatus bowTargetStatus(Entity entity, double range) {
+        TargetFacts facts = targetFacts(entity);
+        if (facts == null) return BowTargetStatus.INVALID;
+        if (!facts.visible()) return BowTargetStatus.NOT_VISIBLE;
+        if (facts.distance() > range) return BowTargetStatus.OUT_OF_RANGE;
+        if (facts.distance() <= MELEE_PREP_RANGE) return BowTargetStatus.MELEE_HANDOFF;
+        if (!facts.aggroedOnBot() && facts.distance() < BOW_FALLBACK_MIN_RANGE) return BowTargetStatus.WAITING_FOR_SPACING;
+
+        return BowTargetStatus.READY;
     }
 
     boolean closeMeleeThreat(Entity entity) {
@@ -80,5 +83,24 @@ final class PlaneBowTargeting {
     }
 
     private record TargetFacts(double distance, boolean visible, boolean aggroedOnBot) {
+    }
+
+    enum BowTargetStatus {
+        READY("target ready"),
+        INVALID("target lost"),
+        NOT_VISIBLE("visibility lost"),
+        OUT_OF_RANGE("target out of bow range"),
+        MELEE_HANDOFF("target entered melee handoff range"),
+        WAITING_FOR_SPACING("target is too close without bot aggro");
+
+        private final String logReason;
+
+        BowTargetStatus(String logReason) {
+            this.logReason = logReason;
+        }
+
+        String logReason() {
+            return logReason;
+        }
     }
 }

@@ -2,18 +2,18 @@ package com.watchmenbot.modules.planebuilder;
 
 import com.watchmenbot.util.WorkflowLogger;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 
 final class PlaneBowDefenseWorkflow {
     private static final int MAX_AIM_WAIT_TICKS = 30;
+    private static final int REQUIRED_STABLE_DIRECT_HIT_TICKS = 2;
     private static final int LOG_THROTTLE_TICKS = 20;
 
-    private final MinecraftClient mc = MinecraftClient.getInstance();
     private final PlaneBuilderSettings.BowDefense settings;
     private final PlaneActionGuards guards;
     private final PlaneInventory inventory;
     private final PlaneBowTargeting targeting = new PlaneBowTargeting();
+    private final PlaneBowAimController aimController;
     private final PlaneBowShotSimulator shotSimulator = new PlaneBowShotSimulator();
     private final PlaneBowModuleSession moduleSession = new PlaneBowModuleSession();
     private final PlaneBowUseActions useActions = new PlaneBowUseActions();
@@ -22,6 +22,7 @@ final class PlaneBowDefenseWorkflow {
     private State state = State.IDLE;
     private int chargeTicks;
     private int aimWaitTicks;
+    private int stableDirectHitTicks;
     private int lockedTargetId = -1;
     private int logThrottleTicks;
 
@@ -54,6 +55,7 @@ final class PlaneBowDefenseWorkflow {
         this.settings = settings;
         this.guards = guards;
         this.inventory = inventory;
+        this.aimController = new PlaneBowAimController(config);
         this.logger = logger;
     }
 
@@ -67,12 +69,6 @@ final class PlaneBowDefenseWorkflow {
 
     BowDefenseTickResult tickResult(boolean replenishActive, boolean passiveReplenishWindow) {
         if (logThrottleTicks > 0) logThrottleTicks--;
-
-        if (passiveReplenishWindow && !moduleSession.startPassiveLatch(settings.range().get())) {
-            stop();
-            return new BowDefenseTickResult(false);
-        }
-        if (!passiveReplenishWindow) moduleSession.releasePassiveLatch();
 
         if (state != State.IDLE) {
             return new BowDefenseTickResult(tickActiveShot(replenishActive));
@@ -99,7 +95,7 @@ final class PlaneBowDefenseWorkflow {
             return new BowDefenseTickResult(false);
         }
 
-        if (!start(bow, target, passiveReplenishWindow)) {
+        if (!start(bow, target)) {
             stopShot(passiveReplenishWindow);
             return new BowDefenseTickResult(false);
         }
@@ -127,14 +123,15 @@ final class PlaneBowDefenseWorkflow {
     }
 
     void releasePassiveLatch() {
-        moduleSession.releasePassiveLatch();
+        moduleSession.stopShot();
     }
 
-    private boolean start(FindItemResult bow, Entity target, boolean passiveReplenishWindow) {
-        if (!moduleSession.start(bow, settings.range().get(), passiveReplenishWindow)) return false;
+    private boolean start(FindItemResult bow, Entity target) {
+        if (!moduleSession.start(bow)) return false;
 
         chargeTicks = 0;
         aimWaitTicks = 0;
+        stableDirectHitTicks = 0;
         lockedTargetId = target.getId();
 
         useActions.holdUse();
@@ -154,22 +151,39 @@ final class PlaneBowDefenseWorkflow {
         }
 
         Entity target = targeting.lockedTarget(lockedTargetId);
-        if (!targeting.safeBowTarget(target, settings.range().get())) {
-            logInfo("Bow defense cancelled because the locked target is no longer safe.");
+        PlaneBowTargeting.BowTargetStatus targetStatus = targeting.bowTargetStatus(target, settings.range().get());
+        if (targetStatus != PlaneBowTargeting.BowTargetStatus.READY) {
+            stableDirectHitTicks = 0;
+            logInfo("Bow defense cancelled: %s.", targetStatus.logReason());
             stopShot(moduleSession.passiveLatched());
             return false;
         }
 
         useActions.holdUse();
         chargeTicks++;
+        if (!aimController.aimAt(target, chargeTicks)) {
+            stableDirectHitTicks = 0;
+            logInfo("Bow defense waiting: no ballistic aim solution for %s.", target.getName().getString());
+        }
         if (chargeTicks < settings.chargeTicks().get()) return true;
 
-        boolean directHit = shotSimulator.simulatedFirstHitIsTarget(target);
-        if (PlaneBowDefenseDecisions.shouldRelease(chargeTicks, settings.chargeTicks().get(), directHit)) {
+        PlaneBowShotSimulator.ShotPrediction shotPrediction = shotSimulator.simulatedFirstHit(target);
+        stableDirectHitTicks = shotPrediction == PlaneBowShotSimulator.ShotPrediction.DIRECT_TARGET
+            ? stableDirectHitTicks + 1
+            : 0;
+        if (PlaneBowDefenseDecisions.shouldRelease(
+            chargeTicks,
+            settings.chargeTicks().get(),
+            stableDirectHitTicks,
+            REQUIRED_STABLE_DIRECT_HIT_TICKS
+        )) {
             logInfo("Bow defense releasing direct-hit shot at %s.", target.getName().getString());
             useActions.release();
             stopShot(moduleSession.passiveLatched());
             return true;
+        }
+        if (shotPrediction != PlaneBowShotSimulator.ShotPrediction.DIRECT_TARGET) {
+            logInfo("Bow defense waiting: %s.", shotPrediction.logReason());
         }
 
         aimWaitTicks++;
@@ -190,6 +204,7 @@ final class PlaneBowDefenseWorkflow {
         moduleSession.stopAll();
         chargeTicks = 0;
         aimWaitTicks = 0;
+        stableDirectHitTicks = 0;
         lockedTargetId = -1;
         state = State.IDLE;
     }
@@ -209,6 +224,7 @@ final class PlaneBowDefenseWorkflow {
         else moduleSession.stopAll();
         chargeTicks = 0;
         aimWaitTicks = 0;
+        stableDirectHitTicks = 0;
         lockedTargetId = -1;
         state = State.IDLE;
     }

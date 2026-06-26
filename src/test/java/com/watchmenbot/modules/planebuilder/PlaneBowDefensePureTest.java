@@ -1,9 +1,9 @@
 package com.watchmenbot.modules.planebuilder;
 
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
+import net.minecraft.util.math.Vec3d;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertEquals;
 import static com.watchmenbot.modules.planebuilder.PlaneTestAssertions.assertFalse;
@@ -16,11 +16,12 @@ final class PlaneBowDefensePureTest {
     static void run() {
         gatesBowDefense();
         gatesBowDefenseRelease();
+        solvesBowAimForStationaryTargets();
+        leadsMovingBowTargets();
+        rejectsImpossibleBowAim();
         keepsBowDefenseAvailableDuringReplenishPhases();
-        latchesPassiveBowAimbotSession();
-        keepsPassiveBowAimbotLatchedAcrossPassiveWindows();
-        restoresOriginallyActivePassiveBowAimbotSession();
-        restoresNormalShotSessionImmediately();
+        startsShotSessionWithoutBowAimbot();
+        restoresShotSession();
     }
 
     private static void gatesBowDefense() {
@@ -85,16 +86,16 @@ final class PlaneBowDefensePureTest {
 
     private static void gatesBowDefenseRelease() {
         assertFalse(
-            PlaneBowDefenseDecisions.shouldRelease(19, 20, true),
+            PlaneBowDefenseDecisions.shouldRelease(19, 20, 2, 2),
             "bow defense does not release before required charge"
         );
         assertFalse(
-            PlaneBowDefenseDecisions.shouldRelease(20, 20, false),
-            "bow defense does not release without a direct-hit prediction"
+            PlaneBowDefenseDecisions.shouldRelease(20, 20, 1, 2),
+            "bow defense does not release before the direct-hit prediction is stable"
         );
         assertTrue(
-            PlaneBowDefenseDecisions.shouldRelease(20, 20, true),
-            "bow defense releases after charge when prediction hits locked target"
+            PlaneBowDefenseDecisions.shouldRelease(20, 20, 2, 2),
+            "bow defense releases after charge when prediction is stable on the locked target"
         );
         assertFalse(
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(29, 30),
@@ -104,6 +105,38 @@ final class PlaneBowDefensePureTest {
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(30, 30),
             "bow defense cancels the current shot at aim timeout"
         );
+    }
+
+    private static void solvesBowAimForStationaryTargets() {
+        Vec3d shooter = new Vec3d(0.0, 65.6, 0.0);
+
+        assertValidAim(shooter, new Vec3d(4.6, 65.6, 0.0), "close stationary target has a bow aim solution");
+        assertValidAim(shooter, new Vec3d(12.0, 65.6, 0.0), "mid-range stationary target has a bow aim solution");
+        assertValidAim(shooter, new Vec3d(20.0, 65.6, 0.0), "long stationary target has a bow aim solution");
+    }
+
+    private static void leadsMovingBowTargets() {
+        Vec3d shooter = new Vec3d(0.0, 65.6, 0.0);
+        Vec3d target = new Vec3d(12.0, 65.6, 0.0);
+
+        PlaneBowAimController.Aim stationary = PlaneBowAimController.solve(shooter, target, Vec3d.ZERO, 20).orElseThrow();
+        PlaneBowAimController.Aim moving = PlaneBowAimController.solve(shooter, target, new Vec3d(0.2, 0.0, 0.0), 20).orElseThrow();
+
+        assertTrue(
+            moving.aimedTarget().x > stationary.aimedTarget().x,
+            "moving target aim leads the target along its velocity"
+        );
+    }
+
+    private static void rejectsImpossibleBowAim() {
+        Optional<PlaneBowAimController.Aim> aim = PlaneBowAimController.solve(
+            new Vec3d(0.0, 65.6, 0.0),
+            new Vec3d(100.0, 95.6, 0.0),
+            Vec3d.ZERO,
+            5
+        );
+
+        assertTrue(aim.isEmpty(), "impossible low-charge high-distance shot returns no bow aim");
     }
 
     private static void keepsBowDefenseAvailableDuringReplenishPhases() {
@@ -147,129 +180,30 @@ final class PlaneBowDefensePureTest {
             || phase == Phase.WAITING_FOR_TRASH_TO_FALL;
     }
 
-    private static void latchesPassiveBowAimbotSession() {
-        FakeBowAimbotHandle bowAimbot = new FakeBowAimbotHandle(false);
+    private static void startsShotSessionWithoutBowAimbot() {
         FakeHotbarSwapper hotbar = new FakeHotbarSwapper();
-        PlaneBowModuleSession session = new PlaneBowModuleSession(bowAimbot, hotbar);
+        PlaneBowModuleSession session = new PlaneBowModuleSession(hotbar);
 
-        assertTrue(session.startPassiveLatch(20.0), "passive latch starts when bow aimbot is available");
-        assertTrue(bowAimbot.active, "passive latch enables inactive bow aimbot");
-        assertEquals(1, bowAimbot.toggleCount, "passive latch toggles bow aimbot on once");
-        assertEquals(1, bowAimbot.applySettingsCount, "passive latch applies settings once");
-
-        assertTrue(session.startPassiveLatch(20.0), "second passive latch tick remains valid");
-        assertEquals(1, bowAimbot.toggleCount, "second passive tick does not toggle again");
-        assertEquals(1, bowAimbot.applySettingsCount, "second passive tick does not reapply settings");
-
-        assertTrue(session.start(new FindItemResult(0, 1), 20.0, true), "passive shot can swap to bow");
-        session.stopShot();
-        assertTrue(bowAimbot.active, "stopping passive shot leaves latched bow aimbot active");
-        assertEquals(1, hotbar.swapBackCount, "stopping passive shot swaps back once");
-        assertEquals(0, bowAimbot.restoreCount(), "stopping passive shot does not restore passive settings");
-
-        session.releasePassiveLatch();
-        assertFalse(bowAimbot.active, "releasing passive latch restores inactive bow aimbot");
-        assertEquals(2, bowAimbot.toggleCount, "passive latch toggles off on release");
-        assertEquals(1, bowAimbot.restoreCount(), "passive latch restores settings on release");
+        assertTrue(session.start(new FindItemResult(0, 1)), "normal shot starts without requiring bow aimbot");
+        assertTrue(session.active(), "normal shot session is active after swapping to the bow");
+        assertEquals(0, hotbar.swapBackCount, "start does not immediately swap back");
     }
 
-    private static void keepsPassiveBowAimbotLatchedAcrossPassiveWindows() {
-        FakeBowAimbotHandle bowAimbot = new FakeBowAimbotHandle(false);
-        PlaneBowModuleSession session = new PlaneBowModuleSession(bowAimbot, new FakeHotbarSwapper());
-
-        assertTrue(session.startPassiveLatch(20.0), "first passive replenish window starts bow aimbot latch");
-        assertTrue(session.startPassiveLatch(20.0), "next passive replenish window reuses existing bow aimbot latch");
-        assertTrue(session.startPassiveLatch(20.0), "third passive replenish window still reuses existing bow aimbot latch");
-        assertTrue(bowAimbot.active, "passive replenish windows keep bow aimbot active");
-        assertEquals(1, bowAimbot.toggleCount, "passive-to-passive replenish windows do not toggle bow aimbot each tick");
-        assertEquals(1, bowAimbot.applySettingsCount, "passive-to-passive replenish windows do not reapply settings each tick");
-
-        session.releasePassiveLatch();
-        assertFalse(bowAimbot.active, "protected replenish work can still release the passive latch");
-        assertEquals(2, bowAimbot.toggleCount, "protected release toggles bow aimbot off once");
-    }
-
-    private static void restoresOriginallyActivePassiveBowAimbotSession() {
-        FakeBowAimbotHandle bowAimbot = new FakeBowAimbotHandle(true);
-        PlaneBowModuleSession session = new PlaneBowModuleSession(bowAimbot, new FakeHotbarSwapper());
-
-        assertTrue(session.startPassiveLatch(20.0), "passive latch starts when bow aimbot is already active");
-        assertTrue(bowAimbot.active, "passive latch keeps already active bow aimbot active");
-        assertEquals(0, bowAimbot.toggleCount, "passive latch does not toggle already active bow aimbot");
-
-        session.releasePassiveLatch();
-        assertTrue(bowAimbot.active, "passive latch release preserves originally active bow aimbot");
-        assertEquals(0, bowAimbot.toggleCount, "passive latch never toggles originally active bow aimbot");
-        assertEquals(1, bowAimbot.restoreCount(), "passive latch restores settings for originally active bow aimbot");
-    }
-
-    private static void restoresNormalShotSessionImmediately() {
-        FakeBowAimbotHandle bowAimbot = new FakeBowAimbotHandle(false);
+    private static void restoresShotSession() {
         FakeHotbarSwapper hotbar = new FakeHotbarSwapper();
-        PlaneBowModuleSession session = new PlaneBowModuleSession(bowAimbot, hotbar);
+        PlaneBowModuleSession session = new PlaneBowModuleSession(hotbar);
 
-        assertTrue(session.start(new FindItemResult(0, 1), 20.0, false), "normal shot starts bow aimbot session");
-        assertTrue(bowAimbot.active, "normal shot enables bow aimbot");
-        assertEquals(1, bowAimbot.toggleCount, "normal shot toggles bow aimbot on");
+        assertTrue(session.start(new FindItemResult(0, 1)), "normal shot starts bow session");
 
         session.stopShot();
-        assertFalse(bowAimbot.active, "normal shot restores inactive bow aimbot immediately");
-        assertEquals(2, bowAimbot.toggleCount, "normal shot toggles bow aimbot off on stop");
-        assertEquals(1, bowAimbot.restoreCount(), "normal shot restores settings on stop");
+        assertFalse(session.active(), "normal shot session is inactive after stop");
         assertEquals(1, hotbar.swapBackCount, "normal shot swaps back on stop");
     }
 
-    private static final class FakeBowAimbotHandle implements PlaneBowModuleSession.BowAimbotHandle {
-        private final List<FakeSettingSnapshot> snapshots = new ArrayList<>();
-        private boolean active;
-        private int toggleCount;
-        private int applySettingsCount;
-
-        private FakeBowAimbotHandle(boolean active) {
-            this.active = active;
-        }
-
-        @Override
-        public boolean available() {
-            return true;
-        }
-
-        @Override
-        public boolean active() {
-            return active;
-        }
-
-        @Override
-        public void toggle() {
-            active = !active;
-            toggleCount++;
-        }
-
-        @Override
-        public List<PlaneBowModuleSession.RestorableSetting> applySettings(double range) {
-            applySettingsCount++;
-            FakeSettingSnapshot snapshot = new FakeSettingSnapshot();
-            snapshots.add(snapshot);
-            return List.of(snapshot);
-        }
-
-        private int restoreCount() {
-            int restored = 0;
-            for (FakeSettingSnapshot snapshot : snapshots) {
-                if (snapshot.restored) restored++;
-            }
-
-            return restored;
-        }
-    }
-
-    private static final class FakeSettingSnapshot implements PlaneBowModuleSession.RestorableSetting {
-        private boolean restored;
-
-        @Override
-        public void restore() {
-            restored = true;
-        }
+    private static void assertValidAim(Vec3d shooter, Vec3d target, String message) {
+        Optional<PlaneBowAimController.Aim> aim = PlaneBowAimController.solve(shooter, target, Vec3d.ZERO, 20);
+        assertTrue(aim.isPresent(), message);
+        assertTrue(!Double.isNaN(aim.get().yaw()) && !Double.isNaN(aim.get().pitch()), message + " with finite rotation");
     }
 
     private static final class FakeHotbarSwapper implements PlaneBowModuleSession.HotbarSwapper {
