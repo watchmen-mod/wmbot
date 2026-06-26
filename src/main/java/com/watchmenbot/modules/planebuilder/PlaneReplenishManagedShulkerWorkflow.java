@@ -148,30 +148,33 @@ final class PlaneReplenishManagedShulkerWorkflow {
 
         if (managedShulker.postBreakRecovery()) {
             EnderChestShulkerSourceScan scan = inventory.scanEnderChestShulkerSources();
-            if (inventory.countLooseEnderChests() > 0 || scan.hasVisibleSource()) {
-                if (managedShulker.failedBeforeOpenRecovery()) {
-                    logger.warning(
-                        "Managed ender chest shulker disappeared before opening; recovered supply and blocking service hole to avoid place/break loop: phase=%s serviceHoleStatus=%s playerPos=%s serviceHole=%s openedOrExtracted=%s looseEnderChests=%d hotbarSlot=%d mainSlot=%d shulkerStacks=%d containedEnderChests=%d failedOpenAttempts=%d next=%s.",
-                        currentPhase.get().label(),
-                        status,
-                        context.player().getBlockPos(),
-                        serviceHole.hole(),
-                        managedShulker.openedOrExtracted(),
-                        inventory.countLooseEnderChests(),
-                        scan.hotbarSlot(),
-                        scan.mainInventorySlot(),
-                        scan.shulkerStacks(),
-                        scan.containedEnderChests(),
-                        managedShulker.failedOpenAttempts(),
-                        Phase.SELECTING_SERVICE_HOLE.label()
-                    );
-                    managedShulker.clearFailedBeforeOpenRecovery();
-                    managedShulker.clearPostBreakRecovery();
-                    managedShulkerRecovery.reset();
-                    managedShulkerRecoveryLogTicks = 0;
-                    serviceHole.markSelectedBlocked();
-                    return Phase.SELECTING_SERVICE_HOLE;
-                }
+            int looseEnderChests = inventory.countLooseEnderChests();
+            boolean visibleShulkerSource = scan.hasVisibleSource();
+            if (managedShulker.failedBeforeOpenRecovery() && (looseEnderChests > 0 || visibleShulkerSource)) {
+                logger.warning(
+                    "Managed ender chest shulker disappeared before opening; recovered supply and blocking service hole to avoid place/break loop: phase=%s serviceHoleStatus=%s playerPos=%s serviceHole=%s openedOrExtracted=%s looseEnderChests=%d hotbarSlot=%d mainSlot=%d shulkerStacks=%d containedEnderChests=%d failedOpenAttempts=%d next=%s.",
+                    currentPhase.get().label(),
+                    status,
+                    context.player().getBlockPos(),
+                    serviceHole.hole(),
+                    managedShulker.openedOrExtracted(),
+                    looseEnderChests,
+                    scan.hotbarSlot(),
+                    scan.mainInventorySlot(),
+                    scan.shulkerStacks(),
+                    scan.containedEnderChests(),
+                    managedShulker.failedOpenAttempts(),
+                    Phase.SELECTING_SERVICE_HOLE.label()
+                );
+                managedShulker.clearFailedBeforeOpenRecovery();
+                managedShulker.clearPostBreakRecovery();
+                managedShulkerRecovery.reset();
+                managedShulkerRecoveryLogTicks = 0;
+                serviceHole.markSelectedBlocked();
+                return Phase.SELECTING_SERVICE_HOLE;
+            }
+
+            if (!shouldRecoverManagedShulkerDrop(managedShulker.failedBeforeOpenRecovery(), looseEnderChests, visibleShulkerSource)) {
                 managedShulker.clearPostBreakRecovery();
                 managedShulkerRecovery.reset();
                 managedShulkerRecoveryLogTicks = 0;
@@ -267,5 +270,14 @@ final class PlaneReplenishManagedShulkerWorkflow {
 
     private static boolean missingSupplyPhase(Phase phase) {
         return phase == Phase.MISSING_ENDER_CHEST || phase == Phase.MISSING_ENDER_CHEST_SHULKER;
+    }
+
+    static boolean shouldRecoverManagedShulkerDrop(
+        boolean failedBeforeOpenRecovery,
+        int looseEnderChests,
+        boolean visibleShulkerSource
+    ) {
+        if (failedBeforeOpenRecovery && looseEnderChests > 0) return false;
+        return !visibleShulkerSource;
     }
 }

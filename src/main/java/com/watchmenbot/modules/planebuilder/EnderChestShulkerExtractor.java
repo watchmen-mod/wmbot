@@ -239,7 +239,7 @@ final class EnderChestShulkerExtractor {
     }
 
     private int effectiveReplenishTarget() {
-        return inventory.effectiveReplenishTarget(replenishSettings.targetObsidian().get());
+        return PlaneReplenishTargets.effectiveTarget(inventory, replenishSettings);
     }
 
     private boolean targetBuildBlockCountReached() {

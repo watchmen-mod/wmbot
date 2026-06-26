@@ -1,56 +1,21 @@
 package com.watchmenbot.modules.planebuilder;
 
-import baritone.api.BaritoneAPI;
-import baritone.api.Settings;
+import com.watchmenbot.util.BaritoneCompatibility;
 
 final class PlaneBaritoneSafetyGuard {
-    private BaritoneSafetySettings savedSettings;
+    private final BaritoneSafety safety = BaritoneCompatibility.available() ? new BaritonePlaneSafetyGuard() : null;
 
     void apply() {
-        Settings settings = BaritoneAPI.getSettings();
-        if (savedSettings == null) {
-            savedSettings = new BaritoneSafetySettings(
-                settings.allowBreak.value,
-                settings.allowPlace.value,
-                settings.allowParkourPlace.value,
-                settings.allowInventory.value,
-                settings.autoTool.value,
-                settings.rightClickContainerOnArrival.value,
-                settings.allowDownward.value
-            );
-        }
-
-        settings.allowBreak.value = false;
-        settings.allowPlace.value = false;
-        settings.allowParkourPlace.value = false;
-        settings.allowInventory.value = false;
-        settings.autoTool.value = false;
-        settings.rightClickContainerOnArrival.value = false;
-        settings.allowDownward.value = false;
+        if (safety != null) safety.apply();
     }
 
     void restore() {
-        if (savedSettings == null) return;
-
-        Settings settings = BaritoneAPI.getSettings();
-        settings.allowBreak.value = savedSettings.allowBreak();
-        settings.allowPlace.value = savedSettings.allowPlace();
-        settings.allowParkourPlace.value = savedSettings.allowParkourPlace();
-        settings.allowInventory.value = savedSettings.allowInventory();
-        settings.autoTool.value = savedSettings.autoTool();
-        settings.rightClickContainerOnArrival.value = savedSettings.rightClickContainerOnArrival();
-        settings.allowDownward.value = savedSettings.allowDownward();
-        savedSettings = null;
+        if (safety != null) safety.restore();
     }
 
-    private record BaritoneSafetySettings(
-        boolean allowBreak,
-        boolean allowPlace,
-        boolean allowParkourPlace,
-        boolean allowInventory,
-        boolean autoTool,
-        boolean rightClickContainerOnArrival,
-        boolean allowDownward
-    ) {
+    interface BaritoneSafety {
+        void apply();
+
+        void restore();
     }
 }

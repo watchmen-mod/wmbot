@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.planebuilder;
 
 import com.watchmenbot.WMBot;
+import com.watchmenbot.util.BaritoneCompatibility;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.game.ReceiveMessageEvent;
@@ -25,6 +26,7 @@ public class PlaneBuilder extends Module {
     private final CompanionModuleManager companionModules = new CompanionModuleManager(
         PlaneBuilderSettings.companionModules(sgCompanionModules)
     );
+    private final PlaneModuleIsolationSession moduleIsolation = new PlaneModuleIsolationSession();
     private final PlaneBuilderCoordinator coordinator = new PlaneBuilderCoordinator(
         companionModules,
         PlaneBuilderSettings.replenish(sgReplenish),
@@ -49,6 +51,7 @@ public class PlaneBuilder extends Module {
         }
     );
     private int worldReadyTicks;
+    private boolean missingBaritoneWarningShown;
 
     public PlaneBuilder() {
         super(WMBot.CATEGORY, "plane-builder", "Builds an obsidian plane and replenishes from ender chests.");
@@ -62,9 +65,11 @@ public class PlaneBuilder extends Module {
 
     @Override
     public void onActivate() {
+        moduleIsolation.start(this);
         coordinator.reset();
         coordinator.startStatsSession(System.currentTimeMillis());
         worldReadyTicks = 0;
+        warnMissingBaritoneIfNeeded();
     }
 
     @Override
@@ -72,6 +77,7 @@ public class PlaneBuilder extends Module {
         coordinator.reset();
         worldReadyTicks = 0;
         companionModules.restore();
+        moduleIsolation.restore(this);
     }
 
     @Override
@@ -194,7 +200,15 @@ public class PlaneBuilder extends Module {
         }
 
         companionModules.resume();
+        warnMissingBaritoneIfNeeded();
         coordinator.tick();
         logTeleportAcceptResult(coordinator.consumeTeleportAcceptResult());
+    }
+
+    private void warnMissingBaritoneIfNeeded() {
+        if (BaritoneCompatibility.available() || missingBaritoneWarningShown) return;
+
+        warning(BaritoneCompatibility.missingMessage());
+        missingBaritoneWarningShown = true;
     }
 }

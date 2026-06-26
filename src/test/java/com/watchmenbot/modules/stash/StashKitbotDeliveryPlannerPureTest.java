@@ -18,6 +18,7 @@ final class StashKitbotDeliveryPlannerPureTest {
         plansCrossDimensionTeleportDetection();
         plansRequesterReacquirePolicy();
         plansRequesterSearchReadiness();
+        plansDeliveryMovementWatchdog();
         plansDeliveryCommandPolicy();
         plansKillHomeRespawnPolicy();
     }
@@ -224,6 +225,54 @@ final class StashKitbotDeliveryPlannerPureTest {
         assertTrue(
             StashKitbotDeliveryPlanner.requesterSearchReady(true, true, true),
             "ready client state can search requester"
+        );
+    }
+
+    private static void plansDeliveryMovementWatchdog() {
+        assertTrue(
+            StashKitbotDeliveryPlanner.deliveryMovementProgressed(1.0, 0.0, false),
+            "meaningful player movement resets delivery stuck tracking"
+        );
+        assertTrue(
+            StashKitbotDeliveryPlanner.deliveryMovementProgressed(0.0, 2.0, false),
+            "requester distance improvement resets delivery stuck tracking"
+        );
+        assertFalse(
+            StashKitbotDeliveryPlanner.deliveryMovementProgressed(0.0, -2.0, false),
+            "requester distance regression does not reset delivery stuck tracking"
+        );
+        assertTrue(
+            StashKitbotDeliveryPlanner.deliveryMovementProgressed(0.0, 0.0, true),
+            "delivery spot change resets delivery stuck tracking"
+        );
+        assertFalse(
+            StashKitbotDeliveryPlanner.deliveryMovementProgressed(0.0, 0.0, false),
+            "no movement, distance change, or spot change counts as no progress"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision.TRACK,
+            StashKitbotDeliveryPlanner.deliveryStuckDecision(true, 80, 80, 0, true),
+            "progress keeps watchdog tracking even at threshold"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision.TRACK,
+            StashKitbotDeliveryPlanner.deliveryStuckDecision(false, 79, 80, 0, true),
+            "watchdog waits until stuck threshold"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision.RESET_MOVEMENT,
+            StashKitbotDeliveryPlanner.deliveryStuckDecision(false, 80, 80, 0, true),
+            "first stuck detection resets movement"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision.THROW_NOW,
+            StashKitbotDeliveryPlanner.deliveryStuckDecision(false, 80, 80, 1, true),
+            "repeated stuck with visible requester falls back to throwing"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.DeliveryStuckDecision.REACQUIRE_REQUESTER,
+            StashKitbotDeliveryPlanner.deliveryStuckDecision(false, 80, 80, 1, false),
+            "repeated stuck without visible requester reacquires"
         );
     }
 

@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.stash;
 
 import com.watchmenbot.WMBot;
+import com.watchmenbot.util.BaritoneCompatibility;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -145,6 +146,7 @@ public class StashScanner extends Module {
     };
     private final StashScannerCache scannerCache = new StashScannerCache(mc, session, cache, scannerEvents);
     private final StashScannerWorkflow workflow = new StashScannerWorkflow(mc, session, discovery, navigator, safetyGuard, reader, interactor, scannerEvents);
+    private boolean missingBaritoneWarningShown;
 
     public StashScanner() {
         super(WMBot.CATEGORY, "stash-scanner", "Safely scans stash storage and writes a lookup cache.");
@@ -168,6 +170,7 @@ public class StashScanner extends Module {
         session.reset(mc.player == null ? null : mc.player.getBlockPos());
         scannerCache.load(true);
         safetyGuard.apply();
+        warnMissingBaritoneIfNeeded();
 
         int discovered = discoverAndQueueTargets();
         if (discovered == 0) warnNoTargets();
@@ -247,11 +250,11 @@ public class StashScanner extends Module {
     }
 
     private int discoverAndQueueTargets() {
-        return workflow.discoverAndQueueTargets(scanRadius.get(), baritonePathing.get(), interactionRangeValue(), skipShulkers.get());
+        return workflow.discoverAndQueueTargets(scanRadius.get(), baritonePathingAvailable(), interactionRangeValue(), skipShulkers.get());
     }
 
     private void warnNoTargets() {
-        if (baritonePathing.get()) warning("No stash containers found in loaded chunks within %d blocks.", scanRadius.get());
+        if (baritonePathingAvailable()) warning("No stash containers found in loaded chunks within %d blocks.", scanRadius.get());
         else warning("No reachable stash containers found within %.1f blocks.", interactionRangeValue());
         session.markNoTargetsWarningShown();
     }
@@ -271,12 +274,25 @@ public class StashScanner extends Module {
         return new StashScannerWorkflow.Settings(
             interactionRange.get(),
             openTimeoutTicks.get(),
-            baritonePathing.get(),
+            baritonePathingAvailable(),
             pathTimeoutTicks.get(),
             returnToStart.get(),
             returnTimeoutTicks.get(),
             writeCacheEachContainer.get()
         );
+    }
+
+    private boolean baritonePathingAvailable() {
+        boolean available = !baritonePathing.get() || BaritoneCompatibility.available();
+        if (!available) warnMissingBaritoneIfNeeded();
+        return baritonePathing.get() && available;
+    }
+
+    private void warnMissingBaritoneIfNeeded() {
+        if (!baritonePathing.get() || BaritoneCompatibility.available() || missingBaritoneWarningShown) return;
+
+        warning(BaritoneCompatibility.missingMessage());
+        missingBaritoneWarningShown = true;
     }
 
     public record InventoryStats(

@@ -51,7 +51,14 @@ record PlaneBuilderCoordinatorComponents(
             endermanLookSafety,
             logger
         );
-        PlaneBowDefenseWorkflow bowDefense = new PlaneBowDefenseWorkflow(bowDefenseSettings, guards, inventory);
+        PlaneBowDefenseWorkflow bowDefense = new PlaneBowDefenseWorkflow(
+            bowDefenseSettings,
+            guards,
+            inventory,
+            config,
+            endermanLookSafety,
+            logger
+        );
 
         return new PlaneBuilderCoordinatorComponents(
             context,

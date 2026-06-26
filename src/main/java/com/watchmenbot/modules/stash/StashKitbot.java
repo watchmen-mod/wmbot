@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.stash;
 
 import com.watchmenbot.WMBot;
+import com.watchmenbot.util.BaritoneCompatibility;
 import meteordevelopment.meteorclient.events.game.ReceiveMessageEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -232,6 +233,7 @@ public class StashKitbot extends Module {
         inventory,
         kitbotEvents
     );
+    private boolean missingBaritoneWarningShown;
 
     public StashKitbot() {
         super(WMBot.CATEGORY, "stash-kitbot", "Gathers requested shulker kits from the stash inventory cache after allowlisted whispers.");
@@ -240,6 +242,7 @@ public class StashKitbot extends Module {
     @Override
     public void onActivate() {
         lifecycleWorkflow.activate();
+        warnMissingBaritoneIfNeeded();
     }
 
     @Override
@@ -278,6 +281,7 @@ public class StashKitbot extends Module {
             return;
         }
         if (!canWork()) return;
+        warnMissingBaritoneIfNeeded();
 
         safetyGuard.apply();
         safetyGuard.cancelBreaking(mc);
@@ -389,6 +393,13 @@ public class StashKitbot extends Module {
 
     private boolean canWork() {
         return StashClientUtils.canUse(mc);
+    }
+
+    private void warnMissingBaritoneIfNeeded() {
+        if (BaritoneCompatibility.available() || missingBaritoneWarningShown) return;
+
+        warning(BaritoneCompatibility.missingMessage());
+        missingBaritoneWarningShown = true;
     }
 
     public record KitbotStatsSnapshot(

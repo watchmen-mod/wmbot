@@ -145,12 +145,20 @@ final class PlaneBuilderSettings {
     }
 
     static Replenish replenish(SettingGroup group) {
+        Setting<Boolean> useAvailableSafeInventorySpace = group.add(new BoolSetting.Builder()
+            .name("use-available-safe-inventory-space")
+            .description("Replenishes loose obsidian to safe available inventory capacity instead of the configured target.")
+            .defaultValue(false)
+            .build()
+        );
+
         Setting<Integer> targetObsidian = group.add(new IntSetting.Builder()
             .name("replenish-target-obsidian")
             .description("Obsidian count that finishes Plane Builder replenishment. Runtime inventory capacity safely clamps this target.")
             .defaultValue(REPLENISH_TARGET_OBSIDIAN)
             .range(REPLENISH_MIN_OBSIDIAN, REPLENISH_MAX_OBSIDIAN)
             .sliderRange(REPLENISH_MIN_OBSIDIAN, 512)
+            .visible(() -> !useAvailableSafeInventorySpace.get())
             .build()
         );
 
@@ -161,7 +169,7 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        return new Replenish(targetObsidian, trashHoleCleanup);
+        return new Replenish(targetObsidian, useAvailableSafeInventorySpace, trashHoleCleanup);
     }
 
     static KitbotRefill kitbotRefill(SettingGroup group) {
@@ -245,6 +253,7 @@ final class PlaneBuilderSettings {
 
     record Replenish(
         Setting<Integer> targetObsidian,
+        Setting<Boolean> useAvailableSafeInventorySpace,
         Setting<Boolean> trashHoleCleanup
     ) {
     }

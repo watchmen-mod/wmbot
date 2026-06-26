@@ -25,6 +25,7 @@ final class PlaneUtilityPureTest {
         plansAutoWalkSnakeWaypoints();
         correctsAutoElytraTargetsToSnakeRoute();
         classifiesServiceHoleSupport();
+        classifiesServiceHoleCandidates();
         selectsHoleEscapeTargets();
         selectsTrashEdgeTargets();
         selectsKillAuraMobGroups();
@@ -197,6 +198,50 @@ final class PlaneUtilityPureTest {
         assertTrue(PlaneAreaScanner.serviceSupportUsable(false, true), "solid occupied support is usable");
         assertFalse(PlaneAreaScanner.serviceSupportUsable(true, true), "replaceable support should be filled first");
         assertFalse(PlaneAreaScanner.serviceSupportUsable(false, false), "non-solid occupied support is blocked");
+    }
+
+    private static void classifiesServiceHoleCandidates() {
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.OPEN_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, true, false),
+            "already-open supported service hole is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, true, false),
+            "capped service hole with valid support is selectable"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, true),
+            "capped service hole with replaceable support is selectable after support placement"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(true, false, false, false),
+            "non-solid occupied support is rejected"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, true, false, true),
+            "open replaceable hole without valid support is rejected"
+        );
+        assertEquals(
+            PlaneAreaScanner.ServiceHoleCandidate.NONE,
+            PlaneAreaScanner.serviceHoleCandidateKind(false, false, true, false),
+            "arbitrary supported non-service block is rejected"
+        );
+
+        assertTrue(
+            PlaneAreaScanner.ServiceHoleCandidate.OPEN_SUPPORTED.priority()
+                < PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED.priority(),
+            "already-open supported service holes are preferred over capped supported holes"
+        );
+        assertTrue(
+            PlaneAreaScanner.ServiceHoleCandidate.CAPPED_SUPPORTED.priority()
+                < PlaneAreaScanner.ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT.priority(),
+            "capped supported service holes are preferred over holes that still need support"
+        );
     }
 
     private static void correctsAutoElytraTargetsToSnakeRoute() {

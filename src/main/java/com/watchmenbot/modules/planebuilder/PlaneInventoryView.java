@@ -36,6 +36,64 @@ final class PlaneInventoryView {
         return capacityMatching(this::isBuildBlockStack, config.buildBlock().asItem().getDefaultStack().getMaxCount());
     }
 
+    int safeBuildBlockCapacity() {
+        int buildBlockMaxCount = config.buildBlock().asItem().getDefaultStack().getMaxCount();
+        int currentBuildBlocks = 0;
+        int partialBuildBlockRoom = 0;
+        int emptyInventorySlots = 0;
+        int looseEnderChests = 0;
+        boolean hasPartialLooseEnderChestStack = false;
+        EnderChestShulkerSourceScan shulkerScan = scanEnderChestShulkerSources();
+
+        int inventorySlots = mainInventoryEnd(context.player().getInventory().size());
+        for (int slot = 0; slot < inventorySlots; slot++) {
+            ItemStack stack = context.player().getInventory().getStack(slot);
+            if (stack.isEmpty()) {
+                emptyInventorySlots++;
+            }
+            else if (isBuildBlockStack(stack)) {
+                currentBuildBlocks += stack.getCount();
+                partialBuildBlockRoom += Math.max(0, stack.getMaxCount() - stack.getCount());
+            }
+            else if (stack.isOf(Items.ENDER_CHEST)) {
+                looseEnderChests += stack.getCount();
+                hasPartialLooseEnderChestStack = hasPartialLooseEnderChestStack || stack.getCount() < stack.getMaxCount();
+            }
+        }
+
+        ItemStack offhand = context.player().getOffHandStack();
+        if (isBuildBlockStack(offhand)) {
+            currentBuildBlocks += offhand.getCount();
+            partialBuildBlockRoom += Math.max(0, offhand.getMaxCount() - offhand.getCount());
+        }
+        else if (offhand.isOf(Items.ENDER_CHEST)) {
+            looseEnderChests += offhand.getCount();
+            hasPartialLooseEnderChestStack = hasPartialLooseEnderChestStack || offhand.getCount() < offhand.getMaxCount();
+        }
+
+        int capacityWithoutShulkerReservation = PlaneReplenishTargetPolicy.safeBuildBlockCapacity(
+            currentBuildBlocks,
+            partialBuildBlockRoom,
+            emptyInventorySlots,
+            buildBlockMaxCount,
+            hasPartialLooseEnderChestStack,
+            false,
+            true
+        );
+        boolean shulkerSourceMayBeNeeded = shulkerScan.hasVisibleSource()
+            && currentBuildBlocks + looseEnderChests * EnderChestFarmProgress.OBSIDIAN_PER_ENDER_CHEST < capacityWithoutShulkerReservation;
+
+        return PlaneReplenishTargetPolicy.safeBuildBlockCapacity(
+            currentBuildBlocks,
+            partialBuildBlockRoom,
+            emptyInventorySlots,
+            buildBlockMaxCount,
+            hasPartialLooseEnderChestStack,
+            shulkerSourceMayBeNeeded,
+            true
+        );
+    }
+
     int countLooseEnderChests() {
         return countMatching(stack -> stack.isOf(Items.ENDER_CHEST));
     }

@@ -11,5 +11,6 @@ public final class PlaneBuilderPureTest {
         PlaneUtilityPureTest.run();
         PlaneBuilderStatsPureTest.run();
         PlaneRefactorPureTest.run();
+        PlaneModuleIsolationSessionPureTest.run();
     }
 }

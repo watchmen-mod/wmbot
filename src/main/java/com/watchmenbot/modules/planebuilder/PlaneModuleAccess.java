@@ -5,9 +5,15 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.nbt.NbtCompound;
 
+import java.util.Collection;
+
 final class PlaneModuleAccess {
     Module get(Class<? extends Module> moduleClass) {
         return Modules.get().get(moduleClass);
+    }
+
+    Collection<Module> all() {
+        return Modules.get().getAll();
     }
 
     boolean active(Module module) {

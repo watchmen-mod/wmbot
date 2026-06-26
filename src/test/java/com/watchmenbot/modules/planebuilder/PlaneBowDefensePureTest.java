@@ -16,6 +16,7 @@ final class PlaneBowDefensePureTest {
     static void run() {
         gatesBowDefense();
         gatesBowDefenseRelease();
+        gatesBowDefenseAimSuppression();
         keepsBowDefenseAvailableDuringReplenishPhases();
         latchesPassiveBowAimbotSession();
         keepsPassiveBowAimbotLatchedAcrossPassiveWindows();
@@ -103,6 +104,33 @@ final class PlaneBowDefensePureTest {
         assertTrue(
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(30, 30),
             "bow defense cancels at timeout"
+        );
+    }
+
+    private static void gatesBowDefenseAimSuppression() {
+        assertTrue(
+            PlaneBowDefenseDecisions.suppressesTarget(42, 42, 60),
+            "timed-out target is suppressed while cooldown remains"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.suppressesTarget(42, 43, 60),
+            "different valid target remains selectable during suppression"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.suppressesTarget(42, 42, 0),
+            "suppression expires when cooldown reaches zero"
+        );
+        assertTrue(
+            PlaneBowDefenseDecisions.shouldClearSuppression(0, true),
+            "expired suppression clears even when target is still safe"
+        );
+        assertTrue(
+            PlaneBowDefenseDecisions.shouldClearSuppression(30, false),
+            "suppression clears early when target becomes unsafe or disappears"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.shouldClearSuppression(30, true),
+            "active suppression remains while target is still safe"
         );
     }
 

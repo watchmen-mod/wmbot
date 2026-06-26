@@ -16,6 +16,14 @@ final class PlaneBowTargeting {
         return TargetUtils.get(entity -> safeBowTarget(entity, range), SortPriority.LowestDistance);
     }
 
+    Entity nearestSafeBowTarget(double range, int suppressedTargetId, int suppressionTicksRemaining) {
+        return TargetUtils.get(
+            entity -> safeBowTarget(entity, range)
+                && !PlaneBowDefenseDecisions.suppressesTarget(suppressedTargetId, entity.getId(), suppressionTicksRemaining),
+            SortPriority.LowestDistance
+        );
+    }
+
     Entity lockedTarget(int targetId) {
         return mc.world == null || targetId < 0 ? null : mc.world.getEntityById(targetId);
     }

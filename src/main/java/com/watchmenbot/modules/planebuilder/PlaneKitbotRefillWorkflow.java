@@ -26,7 +26,7 @@ final class PlaneKitbotRefillWorkflow {
             PlaneKitbotSupplyProbes.from(supply),
             PlaneKitbotDroppedSupplyTrackers.from(new PlaneKitbotDroppedSupplyDetector(), 0),
             null,
-            () -> inventory.requiredEnderChestsForTarget(inventory.effectiveReplenishTarget(replenishSettings.targetObsidian().get()))
+            () -> inventory.requiredEnderChestsForTarget(PlaneReplenishTargets.effectiveTarget(inventory, replenishSettings))
         );
     }
 

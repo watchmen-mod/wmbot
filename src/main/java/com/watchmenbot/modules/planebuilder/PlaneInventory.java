@@ -38,11 +38,14 @@ final class PlaneInventory implements PlaneInventoryAccess, PlaneInventoryComman
     }
 
     @Override
-    public int effectiveReplenishTarget(int configuredTarget) {
-        return PlaneInventoryQueries.effectiveReplenishTarget(
+    public int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace) {
+        int safeBuildBlockCapacity = useAvailableSafeInventorySpace ? view.safeBuildBlockCapacity() : 0;
+        return PlaneReplenishTargetPolicy.effectiveTarget(
             configuredTarget,
+            useAvailableSafeInventorySpace,
             config.replenishMinBuildBlocks(),
-            view.buildBlockCapacity()
+            view.buildBlockCapacity(),
+            safeBuildBlockCapacity
         );
     }
 

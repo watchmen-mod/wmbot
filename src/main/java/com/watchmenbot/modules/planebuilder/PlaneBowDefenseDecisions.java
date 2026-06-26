@@ -31,4 +31,14 @@ final class PlaneBowDefenseDecisions {
     static boolean timedOutWaitingForDirectHit(int aimWaitTicks, int maxAimWaitTicks) {
         return aimWaitTicks >= maxAimWaitTicks;
     }
+
+    static boolean suppressesTarget(int suppressedTargetId, int targetId, int suppressionTicksRemaining) {
+        return suppressedTargetId >= 0
+            && targetId == suppressedTargetId
+            && suppressionTicksRemaining > 0;
+    }
+
+    static boolean shouldClearSuppression(int suppressionTicksRemaining, boolean suppressedTargetSafe) {
+        return suppressionTicksRemaining <= 0 || !suppressedTargetSafe;
+    }
 }

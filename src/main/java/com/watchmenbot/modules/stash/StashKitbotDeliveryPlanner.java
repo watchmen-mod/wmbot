@@ -5,6 +5,10 @@ import net.minecraft.util.math.BlockPos;
 import java.util.Locale;
 
 final class StashKitbotDeliveryPlanner {
+    static final int DELIVERY_STUCK_TICKS = 80;
+    private static final double MIN_WATCHDOG_MOVE_SQ = 0.25;
+    private static final double MIN_WATCHDOG_DISTANCE_DELTA_SQ = 1.0;
+
     private StashKitbotDeliveryPlanner() {
     }
 
@@ -136,6 +140,29 @@ final class StashKitbotDeliveryPlanner {
         return worldReady && playerReady && requesterNamePresent;
     }
 
+    static boolean deliveryMovementProgressed(
+        double playerMovementSq,
+        double requesterDistanceImprovementSq,
+        boolean deliverySpotChanged
+    ) {
+        return playerMovementSq >= MIN_WATCHDOG_MOVE_SQ
+            || requesterDistanceImprovementSq >= MIN_WATCHDOG_DISTANCE_DELTA_SQ
+            || deliverySpotChanged;
+    }
+
+    static DeliveryStuckDecision deliveryStuckDecision(
+        boolean progressed,
+        int stuckTicks,
+        int stuckThresholdTicks,
+        int recoveryAttempts,
+        boolean requesterVisible
+    ) {
+        if (progressed) return DeliveryStuckDecision.TRACK;
+        if (stuckTicks < Math.max(1, stuckThresholdTicks)) return DeliveryStuckDecision.TRACK;
+        if (recoveryAttempts <= 0) return DeliveryStuckDecision.RESET_MOVEMENT;
+        return requesterVisible ? DeliveryStuckDecision.THROW_NOW : DeliveryStuckDecision.REACQUIRE_REQUESTER;
+    }
+
     static DeliveryPositionDecision deliveryPositionDecision(
         boolean requesterVisible,
         double requesterDistanceSq,
@@ -232,6 +259,13 @@ final class StashKitbotDeliveryPlanner {
         DIRECT_STEP_AWAY,
         THROW_NOW,
         FAIL_HOME
+    }
+
+    enum DeliveryStuckDecision {
+        TRACK,
+        RESET_MOVEMENT,
+        THROW_NOW,
+        REACQUIRE_REQUESTER
     }
 
     enum CooldownAttribution {

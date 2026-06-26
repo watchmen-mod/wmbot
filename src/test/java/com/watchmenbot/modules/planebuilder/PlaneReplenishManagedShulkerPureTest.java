@@ -15,6 +15,7 @@ final class PlaneReplenishManagedShulkerPureTest {
         detectsConfirmedShulkerExtraction();
         tracksManagedEnderChestShulkerState();
         tracksManagedShulkerFailedOpenRecovery();
+        prioritizesManagedShulkerDropRecoveryAfterPartialExtraction();
         recoversFreshlyBrokenManagedShulkerDrop();
         recoversMissingEnderChestShulkerDrop();
         timesOutStaleManagedShulkerRecoveryDrop();
@@ -98,6 +99,25 @@ final class PlaneReplenishManagedShulkerPureTest {
         opened.markPostBreakRecovery();
         assertFalse(opened.failedBeforeOpenRecovery(), "opened shulker recovery is not treated as failed-open");
         assertTrue(opened.openedOrExtracted(), "opened shulker records extraction progress");
+    }
+
+    private static void prioritizesManagedShulkerDropRecoveryAfterPartialExtraction() {
+        assertTrue(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 1, false),
+            "partial extraction keeps recovering the broken managed shulker drop"
+        );
+        assertTrue(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 0, false),
+            "missing loose supply still recovers the broken managed shulker drop"
+        );
+        assertFalse(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(false, 1, true),
+            "recovered visible shulker source clears post-break recovery"
+        );
+        assertFalse(
+            PlaneReplenishManagedShulkerWorkflow.shouldRecoverManagedShulkerDrop(true, 1, false),
+            "failed-before-open recovery with recovered loose supply keeps the service-hole safety path"
+        );
     }
 
     private static void recoversFreshlyBrokenManagedShulkerDrop() {

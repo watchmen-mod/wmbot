@@ -8,7 +8,7 @@ import net.minecraft.screen.ScreenHandler;
 interface PlaneInventoryAccess {
     int countBuildBlock();
 
-    int effectiveReplenishTarget(int configuredTarget);
+    int effectiveReplenishTarget(int configuredTarget, boolean useAvailableSafeInventorySpace);
 
     int requiredEnderChestsForTarget(int targetBuildBlocks);
 

@@ -86,18 +86,26 @@ final class PlaneAreaScanner {
     }
 
     private boolean isUsableServiceHoleCandidate(BlockPos pos) {
-        if (!isServiceHoleCandidateShape(pos)) return false;
-
-        BlockPos support = pos.down();
-        return validServiceSupport(support) || world.isReplaceable(support);
+        return serviceHoleCandidateKind(pos) != ServiceHoleCandidate.NONE;
     }
 
     private int serviceHoleCandidatePriority(BlockPos pos) {
-        return validServiceSupport(pos.down()) ? 0 : 1;
+        return serviceHoleCandidateKind(pos).priority();
+    }
+
+    private ServiceHoleCandidate serviceHoleCandidateKind(BlockPos pos) {
+        if (!isServiceHoleCandidateShape(pos)) return ServiceHoleCandidate.NONE;
+
+        BlockPos support = pos.down();
+        return serviceHoleCandidateKind(
+            isServiceHoleBlock(pos),
+            world.isReplaceable(pos),
+            validServiceSupport(support),
+            world.isReplaceable(support)
+        );
     }
 
     private boolean isServiceHoleCandidateShape(BlockPos pos) {
-        if (!isServiceHoleBlock(pos)) return false;
         if (playerIntersectsHoleColumn(pos)) return false;
 
         for (int dx = -1; dx <= 1; dx++) {
@@ -111,6 +119,39 @@ final class PlaneAreaScanner {
         }
 
         return true;
+    }
+
+    static ServiceHoleCandidate serviceHoleCandidateKind(
+        boolean serviceHoleBlock,
+        boolean holeReplaceable,
+        boolean supportValid,
+        boolean supportReplaceable
+    ) {
+        if (holeReplaceable) {
+            return supportValid ? ServiceHoleCandidate.OPEN_SUPPORTED : ServiceHoleCandidate.NONE;
+        }
+
+        if (!serviceHoleBlock) return ServiceHoleCandidate.NONE;
+        if (supportValid) return ServiceHoleCandidate.CAPPED_SUPPORTED;
+        if (supportReplaceable) return ServiceHoleCandidate.CAPPED_NEEDS_SUPPORT;
+        return ServiceHoleCandidate.NONE;
+    }
+
+    enum ServiceHoleCandidate {
+        NONE(Integer.MAX_VALUE),
+        OPEN_SUPPORTED(0),
+        CAPPED_SUPPORTED(1),
+        CAPPED_NEEDS_SUPPORT(2);
+
+        private final int priority;
+
+        ServiceHoleCandidate(int priority) {
+            this.priority = priority;
+        }
+
+        int priority() {
+            return priority;
+        }
     }
 
     private boolean playerIntersectsHoleColumn(BlockPos pos) {
