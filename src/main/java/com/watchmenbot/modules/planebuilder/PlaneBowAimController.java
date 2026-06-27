@@ -3,6 +3,7 @@ package com.watchmenbot.modules.planebuilder;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.Optional;
@@ -20,18 +21,40 @@ final class PlaneBowAimController {
     }
 
     boolean aimAt(Entity target, int chargeTicks) {
-        if (mc.player == null || target == null) return false;
+        return aimAt(target, chargeTicks, null);
+    }
+
+    boolean aimAt(Entity target, int chargeTicks, Runnable callback) {
+        Optional<Aim> aim = aim(target, chargeTicks);
+        if (aim.isEmpty()) return false;
+
+        return rotate(aim.get(), callback);
+    }
+
+    Optional<Aim> aim(Entity target, int chargeTicks) {
+        if (mc.player == null || target == null) return Optional.empty();
 
         Vec3d shooter = mc.player.getEyePos();
-        Optional<Aim> aim = solve(
+        return solve(
             shooter,
-            target.getBoundingBox().getCenter(),
+            aimPoint(target.getBoundingBox()),
             target.getVelocity(),
             chargeTicks
         );
-        if (aim.isEmpty()) return false;
+    }
 
-        Rotations.rotate(aim.get().yaw(), aim.get().pitch(), rotationPriority);
+    static Vec3d aimPoint(Box box) {
+        return new Vec3d(
+            (box.minX + box.maxX) * 0.5,
+            box.minY + (box.maxY - box.minY) * 0.55,
+            (box.minZ + box.maxZ) * 0.5
+        );
+    }
+
+    boolean rotate(Aim aim, Runnable callback) {
+        if (aim == null) return false;
+
+        Rotations.rotate(aim.yaw(), aim.pitch(), rotationPriority, callback);
         return true;
     }
 

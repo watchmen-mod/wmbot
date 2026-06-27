@@ -18,6 +18,7 @@ final class EnderChestShulkerExtractor {
     private final PlaneWorldActions actions;
     private final PlaneActionExecutor actionExecutor;
     private final ShulkerExtractionSession session = new ShulkerExtractionSession();
+    private final EnderChestShulkerExtractionBudget budget = new EnderChestShulkerExtractionBudget();
     private final EnderChestShulkerSourceMisses sourceMisses = new EnderChestShulkerSourceMisses();
     private final ShulkerScreenInteractor screens;
     private final PlaneBuilderSettings.Replenish replenishSettings;
@@ -134,6 +135,9 @@ final class EnderChestShulkerExtractor {
     }
 
     Phase place(ServiceHoleContext serviceHole) {
+        if (timedOut(Phase.PLACING_ENDER_CHEST_SHULKER, Phase.MISSING_ENDER_CHEST_SHULKER)) {
+            return Phase.MISSING_ENDER_CHEST_SHULKER;
+        }
         if (!serviceHole.readyForWorkflow()) return Phase.SERVICE_HOLE_BLOCKED;
 
         return switch (serviceHole.status()) {
@@ -151,8 +155,12 @@ final class EnderChestShulkerExtractor {
     }
 
     Phase open(ServiceHoleContext serviceHole) {
+        if (timedOut(Phase.OPENING_ENDER_CHEST_SHULKER, Phase.MISSING_ENDER_CHEST_SHULKER)) {
+            return Phase.MISSING_ENDER_CHEST_SHULKER;
+        }
         if (!guards.clientReady()) return Phase.OPENING_ENDER_CHEST_SHULKER;
         if (screens.playerHasShulkerOpen()) {
+            budget.reset();
             return Phase.TAKING_ENDER_CHESTS_FROM_SHULKER;
         }
         if (!guards.readyForUseAction()) return Phase.OPENING_ENDER_CHEST_SHULKER;
@@ -184,8 +192,22 @@ final class EnderChestShulkerExtractor {
             visibleDroppedObsidian.getAsInt()
         );
         int currentLooseEnderChests = inventory.countLooseEnderChests();
+        if (budget.stalledTake(currentLooseEnderChests)) {
+            int baseline = session.baseline();
+            closeScreenIfSafe();
+            session.reset();
+            budget.reset();
+            logger.warning(
+                "Reset ender chest shulker extraction after stalled transfer: looseEnderChests=%d needed=%d baseline=%d.",
+                currentLooseEnderChests,
+                needed,
+                baseline
+            );
+            return Phase.MISSING_ENDER_CHEST;
+        }
         if (currentLooseEnderChests >= needed) {
             screens.close();
+            budget.reset();
             return Phase.BREAKING_ENDER_CHEST_SHULKER;
         }
         if (!inventory.hasInventorySpaceForEnderChestPreservingShulkerSlot()) {
@@ -208,6 +230,9 @@ final class EnderChestShulkerExtractor {
     }
 
     Phase breakPlacedShulker(ServiceHoleContext serviceHole) {
+        if (timedOut(Phase.BREAKING_ENDER_CHEST_SHULKER, Phase.MISSING_ENDER_CHEST_SHULKER)) {
+            return Phase.MISSING_ENDER_CHEST_SHULKER;
+        }
         if (!guards.clientReady()) return Phase.BREAKING_ENDER_CHEST_SHULKER;
         if (!guards.readyForWorldAction() && screens.onPlayerInventoryScreen()) {
             return Phase.BREAKING_ENDER_CHEST_SHULKER;
@@ -271,6 +296,7 @@ final class EnderChestShulkerExtractor {
     void resetExtractionBaseline() {
         session.reset();
         sourceMisses.reset();
+        budget.reset();
     }
 
     private void ensureExtractionBaseline() {
@@ -319,5 +345,20 @@ final class EnderChestShulkerExtractor {
             effectiveReplenishTarget(),
             visibleDroppedObsidian.getAsInt()
         );
+    }
+
+    private boolean timedOut(Phase timedPhase, Phase resetPhase) {
+        if (!budget.timedOut(timedPhase)) return false;
+
+        closeScreenIfSafe();
+        session.reset();
+        sourceMisses.reset();
+        budget.reset();
+        logger.warning("Reset ender chest shulker workflow after phase timeout: phase=%s next=%s.", timedPhase.label(), resetPhase.label());
+        return true;
+    }
+
+    private void closeScreenIfSafe() {
+        if (guards.safeToCloseManagedScreen()) screens.close();
     }
 }

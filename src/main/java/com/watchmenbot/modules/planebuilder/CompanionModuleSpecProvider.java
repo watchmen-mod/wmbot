@@ -7,6 +7,7 @@ import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
 import meteordevelopment.meteorclient.systems.modules.movement.Velocity;
 import meteordevelopment.meteorclient.systems.modules.player.AutoEat;
 import meteordevelopment.meteorclient.systems.modules.player.InstantRebreak;
+import meteordevelopment.meteorclient.systems.modules.render.NoRender;
 
 import java.util.List;
 
@@ -20,10 +21,11 @@ final class CompanionModuleSpecProvider {
     List<CompanionModuleSpec> specs() {
         return List.of(
             new CompanionModuleSpec(AutoTotem.class, settings.autoTotem(), module -> List.of()),
-            new CompanionModuleSpec(AutoEat.class, settings.autoEat(), module -> List.of()),
+            new CompanionModuleSpec(AutoEat.class, settings.autoEat(), module -> AutoEatCompanionSettings.apply((AutoEat) module)),
             new CompanionModuleSpec(Velocity.class, settings.velocity(), module -> List.of()),
             new CompanionModuleSpec(InstantRebreak.class, settings.instantRebreak(), module -> List.of()),
-            new CompanionModuleSpec(KillAura.class, settings.killAura(), module -> KillAuraCompanionSettings.apply((KillAura) module))
+            new CompanionModuleSpec(KillAura.class, settings.killAura(), module -> KillAuraCompanionSettings.apply((KillAura) module)),
+            new CompanionModuleSpec(NoRender.class, settings.noRender(), module -> NoRenderCompanionSettings.apply((NoRender) module))
         );
     }
 

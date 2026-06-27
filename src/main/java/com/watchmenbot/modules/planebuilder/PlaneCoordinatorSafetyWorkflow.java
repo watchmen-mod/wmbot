@@ -66,6 +66,17 @@ final class PlaneCoordinatorSafetyWorkflow {
     boolean tickSafetyBeforeReplenish(BlockPos playerPos) {
         Phase displayPhase = callbacks.currentPhase();
 
+        if (bowDefense.hasImmediateThreat(24.0)) {
+            if (preemptManagedScreenForThreat()) return true;
+            if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.BOW_DEFENSE)) return true;
+            autoWalk.pause();
+            holeEscape.reset();
+            endermanLookSafety.lookDown();
+            tickReplenishDuringSafetyPreemption(displayPhase);
+            callbacks.setPhase(Phase.IDLE);
+            return true;
+        }
+
         if (PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(displayPhase, false, guards.playerUsingItem())) {
             if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.SAFETY)) return true;
             autoWalk.pause();
@@ -157,6 +168,17 @@ final class PlaneCoordinatorSafetyWorkflow {
     private boolean preemptManagedScreenForBowSafety(boolean bowReplenishActive) {
         if (!guards.managedScreenOpen()) return false;
         if (!bowDefense.hasSafetyOpportunity(bowReplenishActive)) return false;
+
+        autoWalk.pause();
+        autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.BOW_DEFENSE);
+        holeEscape.reset();
+        endermanLookSafety.lookDown();
+        if (guards.safeToCloseManagedScreen()) guards.closeManagedScreenForSafety();
+        return true;
+    }
+
+    private boolean preemptManagedScreenForThreat() {
+        if (!guards.managedScreenOpen()) return false;
 
         autoWalk.pause();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.BOW_DEFENSE);

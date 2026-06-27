@@ -33,7 +33,9 @@ public class StashKitbot extends Module {
     private final Setting<Integer> openTimeoutTicks = kitbotSettings.openTimeoutTicks();
     private final Setting<Integer> maxRequestCount = kitbotSettings.maxRequestCount();
     private final Setting<String> tpaCommand = kitbotSettings.tpaCommand();
+    private final Setting<StashKitbotReturnCommand.ReturnMethod> returnMethod = kitbotSettings.returnMethod();
     private final Setting<String> homeCommand = kitbotSettings.homeCommand();
+    private final Setting<String> customReturnCommand = kitbotSettings.customReturnCommand();
     private final Setting<Integer> deliveryDistance = kitbotSettings.deliveryDistance();
     private final Setting<Integer> teleportTimeoutTicks = kitbotSettings.teleportTimeoutTicks();
     private final Setting<Integer> deliveryTimeoutTicks = kitbotSettings.deliveryTimeoutTicks();
@@ -355,7 +357,7 @@ public class StashKitbot extends Module {
     private StashKitbotDeliveryWorkflow.Settings deliverySettings() {
         return new StashKitbotDeliveryWorkflow.Settings(
             tpaCommand.get(),
-            homeCommand.get(),
+            StashKitbotReturnCommand.command(returnMethod.get(), homeCommand.get(), customReturnCommand.get()),
             deliveryDistance.get(),
             teleportTimeoutTicks.get(),
             deliveryTimeoutTicks.get(),

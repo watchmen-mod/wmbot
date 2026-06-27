@@ -9,6 +9,10 @@ final class PlanePickupSettings {
     static final int MANAGED_SHULKER_RECOVERY_MAX_TARGET_TICKS = 1200;
     static final int MANAGED_SHULKER_RECOVERY_LOG_INTERVAL_TICKS = 20;
     static final int REPATH_COOLDOWN_TICKS = 5;
+    static final int PICKUP_IDLE_REPATHS_BEFORE_NUDGE = 2;
+    static final int PICKUP_NUDGE_TICKS = 4;
+    static final int STUCK_JUMP_TICKS = 20;
+    static final int STUCK_REPATH_COOLDOWN_TICKS = 20;
 
     private PlanePickupSettings() {
     }

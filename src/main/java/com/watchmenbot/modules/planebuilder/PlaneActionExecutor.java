@@ -5,6 +5,7 @@ import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.Hand;
+import net.minecraft.util.ActionResult;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -74,6 +75,10 @@ final class PlaneActionExecutor {
 
     void pressUseKey() {
         mc.options.useKey.setPressed(true);
+        if (mc.interactionManager == null || mc.player == null || mc.player.isUsingItem()) return;
+
+        ActionResult result = mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        if (result.isAccepted()) mc.player.swingHand(Hand.MAIN_HAND);
     }
 
     void releaseUseKey() {

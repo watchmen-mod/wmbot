@@ -7,6 +7,8 @@ final class PlaneDroppedItemPickupWorkflow<T> {
     private final Supplier<T> targetSupplier;
     private final Predicate<T> targetPredicate;
     private final Predicate<T> targetPickupable;
+    private final Predicate<T> targetSafe;
+    private final RejectedTargetLogger<T> rejectedTargetLogger;
     private final Navigator<T> pickupNavigator;
     private final Phase activePhase;
     private final Phase fallbackPhase;
@@ -65,15 +67,72 @@ final class PlaneDroppedItemPickupWorkflow<T> {
         int maxTargetTicks,
         boolean waitForPickupableTarget
     ) {
+        this(
+            targetSupplier,
+            targetPredicate,
+            targetPickupable,
+            target -> true,
+            noopRejectedTargetLogger(),
+            pickupNavigator,
+            activePhase,
+            fallbackPhase,
+            noTargetGraceTicks,
+            maxTargetTicks,
+            waitForPickupableTarget
+        );
+    }
+
+    PlaneDroppedItemPickupWorkflow(
+        Supplier<T> targetSupplier,
+        Predicate<T> targetPredicate,
+        Predicate<T> targetPickupable,
+        Predicate<T> targetSafe,
+        RejectedTargetLogger<T> rejectedTargetLogger,
+        Navigator<T> pickupNavigator,
+        Phase activePhase,
+        Phase fallbackPhase,
+        int noTargetGraceTicks,
+        int maxTargetTicks,
+        boolean waitForPickupableTarget
+    ) {
         this.targetSupplier = targetSupplier;
         this.targetPredicate = targetPredicate;
         this.targetPickupable = targetPickupable;
+        this.targetSafe = targetSafe == null ? target -> true : targetSafe;
+        this.rejectedTargetLogger = rejectedTargetLogger == null ? noopRejectedTargetLogger() : rejectedTargetLogger;
         this.pickupNavigator = pickupNavigator;
         this.activePhase = activePhase;
         this.fallbackPhase = fallbackPhase;
         this.noTargetGraceTicks = Math.max(0, noTargetGraceTicks);
         this.maxTargetTicks = maxTargetTicks;
         this.waitForPickupableTarget = waitForPickupableTarget;
+    }
+
+    PlaneDroppedItemPickupWorkflow(
+        Supplier<T> targetSupplier,
+        Predicate<T> targetPredicate,
+        Predicate<T> targetPickupable,
+        Predicate<T> targetSafe,
+        RejectedTargetLogger<T> rejectedTargetLogger,
+        Navigator<T> pickupNavigator,
+        Phase activePhase,
+        Phase fallbackPhase,
+        int noTargetGraceTicks,
+        int maxTargetTicks
+    ) {
+        this(
+            targetSupplier,
+            targetPredicate,
+            targetPickupable,
+            targetSafe,
+            rejectedTargetLogger,
+            pickupNavigator,
+            activePhase,
+            fallbackPhase,
+            noTargetGraceTicks,
+            maxTargetTicks,
+            false
+        );
     }
 
     void reset() {
@@ -135,12 +194,28 @@ final class PlaneDroppedItemPickupWorkflow<T> {
             pickupTarget = targetSupplier.get();
         }
 
-        return targetPredicate.test(pickupTarget) ? pickupTarget : null;
+        if (!targetPredicate.test(pickupTarget)) return null;
+        if (!targetSafe.test(pickupTarget)) {
+            rejectedTargetLogger.rejected(pickupTarget, activePhase, "unsafe-platform-goal");
+            pickupTarget = null;
+            return null;
+        }
+
+        return pickupTarget;
     }
 
     interface Navigator<T> {
         void pathTo(T target);
 
         void stop();
+    }
+
+    interface RejectedTargetLogger<T> {
+        void rejected(T target, Phase phase, String reason);
+    }
+
+    private static <T> RejectedTargetLogger<T> noopRejectedTargetLogger() {
+        return (target, phase, reason) -> {
+        };
     }
 }

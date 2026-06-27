@@ -110,6 +110,8 @@ record PlaneReplenishComponents(
         EnderChestFarmProgress farmProgress = new EnderChestFarmProgress();
         ManagedEnderChestShulkerState managedShulker = new ManagedEnderChestShulkerState();
         PlaneReplenishDropDetector dropDetector = new PlaneReplenishDropDetector();
+        PlaneMovementSafetyPolicy movementSafety = new PlaneMovementSafetyPolicy(config, (int) Math.ceil(PlanePickupSettings.KITBOT_REFILL_SCAN_RADIUS));
+        PlaneDroppedItemSafety droppedItemSafety = new PlaneDroppedItemSafety(movementSafety, logger);
         ServiceHoleExitWorkflow serviceHoleExit = new ServiceHoleExitWorkflow(
             new ServiceHoleExitPlanner(
                 config,
@@ -163,6 +165,8 @@ record PlaneReplenishComponents(
             dropDetector::nearestCleanupDrop,
             dropDetector::matchesCleanupDrop,
             item -> inventory.hasInventorySpaceForCleanupDrop(item.getStack()),
+            droppedItemSafety::safe,
+            droppedItemSafety::logRejected,
             new PlaneItemPickupNavigator(endermanLookSafety),
             Phase.PICKING_UP_REPLENISH_DROPS,
             Phase.MOVING_TO_TRASH_EDGE,
@@ -173,6 +177,8 @@ record PlaneReplenishComponents(
             dropDetector::nearestShulkerDrop,
             dropDetector::matchesShulkerDrop,
             item -> inventory.hasInventorySpaceForCleanupDrop(item.getStack()),
+            droppedItemSafety::safe,
+            droppedItemSafety::logRejected,
             new PlaneItemPickupNavigator(endermanLookSafety),
             Phase.BREAKING_ENDER_CHEST_SHULKER,
             Phase.MISSING_ENDER_CHEST_SHULKER,
@@ -184,6 +190,8 @@ record PlaneReplenishComponents(
             dropDetector::nearestShulkerDrop,
             dropDetector::matchesShulkerDrop,
             item -> inventory.hasInventorySpaceForCleanupDrop(item.getStack()),
+            droppedItemSafety::safe,
+            droppedItemSafety::logRejected,
             new PlaneItemPickupNavigator(endermanLookSafety),
             Phase.PICKING_UP_REPLENISH_DROPS,
             Phase.PICKING_UP_REPLENISH_DROPS,
@@ -195,6 +203,8 @@ record PlaneReplenishComponents(
             dropDetector::nearestShulkerDrop,
             dropDetector::matchesShulkerDrop,
             item -> inventory.hasInventorySpaceForCleanupDrop(item.getStack()),
+            droppedItemSafety::safe,
+            droppedItemSafety::logRejected,
             new PlaneItemPickupNavigator(endermanLookSafety),
             Phase.PICKING_UP_MISSING_ENDER_CHEST_SHULKER,
             Phase.MISSING_ENDER_CHEST_SHULKER,

@@ -23,6 +23,9 @@ final class PlaneUtilityPureTest {
         boundsMainInventorySlots();
         classifiesUsableElytra();
         computesBuildAreaAndScanBounds();
+        validatesMovementSafetyPolicy();
+        budgetsHotbarMutations();
+        budgetsShulkerExtractionPhases();
         plansAutoWalkSnakeWaypoints();
         correctsAutoElytraTargetsToSnakeRoute();
         classifiesServiceHoleSupport();
@@ -98,6 +101,57 @@ final class PlaneUtilityPureTest {
             PlaneAreaBounds.scanWindow(-10000, -10000, 4),
             "scan window clamps at negative build edge"
         );
+    }
+
+    private static void validatesMovementSafetyPolicy() {
+        PlaneRuntimeConfig config = new PlaneRuntimeConfig(
+            new PlaneBuildConfig(10, -5, 5, -5, 5, 4, 8, -50, 32, 128),
+            null
+        );
+        PlaneMovementSafetyPolicy policy = new PlaneMovementSafetyPolicy(config, 6);
+        BlockPos player = new BlockPos(0, 10, 0);
+
+        assertTrue(policy.validatePlatformGoal(player, new BlockPos(3, 10, 3)).accepted(), "in-bounds platform goal is accepted");
+        assertEquals(
+            PlaneMovementSafetyPolicy.RejectReason.BELOW_PLATFORM,
+            policy.validatePlatformGoal(player, new BlockPos(3, 9, 3)).reason(),
+            "below-platform goal is rejected"
+        );
+        assertEquals(
+            PlaneMovementSafetyPolicy.RejectReason.OUTSIDE_BUILD_AREA,
+            policy.validatePlatformGoal(player, new BlockPos(6, 10, 0)).reason(),
+            "out-of-bounds goal is rejected"
+        );
+        assertEquals(
+            PlaneMovementSafetyPolicy.RejectReason.TOO_FAR,
+            policy.validatePlatformGoal(player, new BlockPos(5, 10, 5)).reason(),
+            "distant goal is rejected"
+        );
+        assertTrue(PlaneMovementSafetyPolicy.isSnowHazardId("minecraft:snow"), "snow layers are hazardous");
+        assertTrue(PlaneMovementSafetyPolicy.isSnowHazardId("minecraft:powder_snow"), "powder snow is hazardous");
+        assertFalse(PlaneMovementSafetyPolicy.isSnowHazardId("minecraft:obsidian"), "build blocks are not snow hazards");
+    }
+
+    private static void budgetsHotbarMutations() {
+        PlaneHotbarMutationGuard guard = new PlaneHotbarMutationGuard(2, 1);
+        assertTrue(guard.allow("pickaxe", 12, 0, 0), "first hotbar mutation is allowed");
+        assertTrue(guard.allow("pickaxe", 12, 0, 0), "second repeated hotbar mutation is allowed");
+        assertFalse(guard.allow("pickaxe", 12, 0, 0), "third repeated hotbar mutation is blocked");
+        assertFalse(guard.allow("pickaxe", 12, 0, 0), "cooldown tick blocks immediate retry");
+        assertTrue(guard.allow("pickaxe", 12, 0, 0), "mutation gets a fresh budget after cooldown");
+    }
+
+    private static void budgetsShulkerExtractionPhases() {
+        EnderChestShulkerExtractionBudget budget = new EnderChestShulkerExtractionBudget(2, 2);
+        assertFalse(budget.timedOut(Phase.OPENING_ENDER_CHEST_SHULKER), "first phase tick is within budget");
+        assertFalse(budget.timedOut(Phase.OPENING_ENDER_CHEST_SHULKER), "second phase tick is within budget");
+        assertTrue(budget.timedOut(Phase.OPENING_ENDER_CHEST_SHULKER), "third phase tick times out");
+
+        budget.reset();
+        assertFalse(budget.stalledTake(1), "first stalled take tick is allowed");
+        assertFalse(budget.stalledTake(1), "second stalled take tick is allowed");
+        assertTrue(budget.stalledTake(1), "third stalled take tick is blocked");
+        assertFalse(budget.stalledTake(2), "increased loose ender chest count resets stall tracking");
     }
 
     private static void plansAutoWalkSnakeWaypoints() {
@@ -583,6 +637,11 @@ final class PlaneUtilityPureTest {
         UUID botUuid = new UUID(0L, 42L);
         UUID otherUuid = new UUID(0L, 43L);
 
+        assertEquals(400, PlaneBowTargeting.threatPriority(true, false, false, true), "witches are highest priority");
+        assertEquals(300, PlaneBowTargeting.threatPriority(false, true, false, true), "skeletons outrank creepers");
+        assertEquals(200, PlaneBowTargeting.threatPriority(false, false, true, true), "creepers outrank generic hostiles");
+        assertEquals(100, PlaneBowTargeting.threatPriority(false, false, false, true), "generic hostiles remain valid threats");
+        assertEquals(0, PlaneBowTargeting.threatPriority(false, false, false, false), "non-hostiles have no threat priority");
         assertTrue(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.MONSTER), "bow defense selects hostile monster mobs");
         assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.CREATURE), "bow defense ignores passive creature mobs");
         assertFalse(KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.AMBIENT), "bow defense ignores ambient mobs");

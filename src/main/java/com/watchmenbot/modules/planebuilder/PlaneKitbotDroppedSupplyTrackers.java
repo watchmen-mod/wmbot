@@ -37,13 +37,22 @@ final class PlaneKitbotDroppedSupplyTrackers {
     static PlaneKitbotDroppedSupplyTracker from(PlaneKitbotDroppedSupplyDetector detector, int noTargetGraceTicks) {
         return new PlaneKitbotDroppedSupplyTracker() {
             private Set<UUID> baselineIds = Set.of();
+            private final PlaneDroppedItemSafety droppedItemSafety = new PlaneDroppedItemSafety(
+                new PlaneMovementSafetyPolicy(PlaneRuntimeConfig.DEFAULT, (int) Math.ceil(PlanePickupSettings.KITBOT_REFILL_SCAN_RADIUS)),
+                PlaneWorkflowLoggers.NOOP
+            );
             private final PlaneDroppedItemPickupWorkflow<ItemEntity> pickupWorkflow = new PlaneDroppedItemPickupWorkflow<>(
                 this::nearestNewDeliveryDrop,
                 detector::matchesSupply,
+                item -> true,
+                droppedItemSafety::safe,
+                droppedItemSafety::logRejected,
                 new PlaneItemPickupNavigator(),
                 Phase.PICKING_UP_KITBOT_REFILL,
                 Phase.WAITING_FOR_KITBOT_REFILL,
-                noTargetGraceTicks
+                noTargetGraceTicks,
+                -1,
+                false
             );
 
             @Override
