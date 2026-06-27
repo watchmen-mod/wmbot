@@ -9,7 +9,10 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.Angerable;
+import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.SkeletonEntity;
+import net.minecraft.entity.mob.WitchEntity;
 
 final class PlaneBowTargeting {
     static final double MELEE_PREP_RANGE = 4.5;
@@ -18,11 +21,20 @@ final class PlaneBowTargeting {
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
     Entity nearestSafeBowTarget(double range) {
-        return TargetUtils.get(entity -> safeBowTarget(entity, range), SortPriority.LowestDistance);
+        Entity prioritized = highestPriorityThreat(entity -> safeBowTarget(entity, range));
+        return prioritized == null ? TargetUtils.get(entity -> safeBowTarget(entity, range), SortPriority.LowestDistance) : prioritized;
     }
 
     Entity nearestCloseMeleeThreat() {
-        return TargetUtils.get(this::closeMeleeThreat, SortPriority.LowestDistance);
+        Entity prioritized = highestPriorityThreat(this::closeMeleeThreat);
+        return prioritized == null ? TargetUtils.get(this::closeMeleeThreat, SortPriority.LowestDistance) : prioritized;
+    }
+
+    boolean nearbyHostileThreat(double range) {
+        return highestPriorityThreat(entity -> {
+            TargetFacts facts = targetFacts(entity);
+            return facts != null && facts.distance() <= range && (facts.visible() || facts.aggroedOnBot());
+        }) != null;
     }
 
     Entity lockedTarget(int targetId) {
@@ -58,6 +70,43 @@ final class PlaneBowTargeting {
 
     static boolean meleePrepPolicy(double distance, boolean aggroedOnBot) {
         return aggroedOnBot && distance <= MELEE_PREP_RANGE;
+    }
+
+    static int threatPriority(boolean witch, boolean skeleton, boolean creeper, boolean hostile) {
+        if (witch) return 400;
+        if (skeleton) return 300;
+        if (creeper) return 200;
+        return hostile ? 100 : 0;
+    }
+
+    private Entity highestPriorityThreat(java.util.function.Predicate<Entity> predicate) {
+        if (mc.world == null || mc.player == null) return null;
+
+        Entity best = null;
+        int bestPriority = 0;
+        double bestDistance = Double.MAX_VALUE;
+        for (Entity entity : mc.world.getEntities()) {
+            if (!predicate.test(entity)) continue;
+
+            int priority = threatPriority(entity);
+            double distance = mc.player.distanceTo(entity);
+            if (priority > bestPriority || (priority == bestPriority && distance < bestDistance)) {
+                best = entity;
+                bestPriority = priority;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
+
+    private static int threatPriority(Entity entity) {
+        return threatPriority(
+            entity instanceof WitchEntity,
+            entity instanceof SkeletonEntity,
+            entity instanceof CreeperEntity,
+            entity instanceof MobEntity
+        );
     }
 
     private TargetFacts targetFacts(Entity entity) {

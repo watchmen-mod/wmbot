@@ -3,15 +3,17 @@ package com.watchmenbot.modules.planebuilder;
 import com.watchmenbot.util.BaritoneCompatibility;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.ItemEntity;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.UUID;
 
 final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.Navigator<ItemEntity> {
     private final BaritoneItemPickupPathing pathing;
+    private final MinecraftClient mc = MinecraftClient.getInstance();
     private final PlaneEndermanLookSafety endermanLookSafety;
+    private final PlaneMovementSafetyPolicy safetyPolicy;
     private final PickupNudger nudger;
     private final PickupRecovery recovery = new PickupRecovery(
         PlanePickupSettings.PICKUP_IDLE_REPATHS_BEFORE_NUDGE,
@@ -19,6 +21,8 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
     );
 
     private int repathCooldown;
+    private int stuckTicks;
+    private BlockPos lastPlayerPos;
     private boolean active;
 
     PlaneItemPickupNavigator() {
@@ -29,13 +33,29 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
         this(
             BaritoneCompatibility.available() ? new BaritonePlaneItemPickupNavigator() : null,
             endermanLookSafety,
+            new PlaneMovementSafetyPolicy(),
             new MinecraftPickupNudger(endermanLookSafety)
         );
     }
 
-    PlaneItemPickupNavigator(BaritoneItemPickupPathing pathing, PlaneEndermanLookSafety endermanLookSafety, PickupNudger nudger) {
+    PlaneItemPickupNavigator(PlaneEndermanLookSafety endermanLookSafety, PlaneMovementSafetyPolicy safetyPolicy) {
+        this(
+            BaritoneCompatibility.available() ? new BaritonePlaneItemPickupNavigator() : null,
+            endermanLookSafety,
+            safetyPolicy,
+            new MinecraftPickupNudger(endermanLookSafety)
+        );
+    }
+
+    PlaneItemPickupNavigator(
+        BaritoneItemPickupPathing pathing,
+        PlaneEndermanLookSafety endermanLookSafety,
+        PlaneMovementSafetyPolicy safetyPolicy,
+        PickupNudger nudger
+    ) {
         this.pathing = pathing;
         this.endermanLookSafety = endermanLookSafety;
+        this.safetyPolicy = safetyPolicy == null ? new PlaneMovementSafetyPolicy() : safetyPolicy;
         this.nudger = nudger;
     }
 
@@ -44,12 +64,23 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
         if (pathing == null) return;
         if (target == null) return;
 
+        BlockPos playerPos = mc.player == null ? null : mc.player.getBlockPos();
+        BlockPos nextPos = target.getBlockPos();
+        if (!safetyPolicy.validatePlatformGoal(playerPos, nextPos).accepted()) {
+            stop();
+            return;
+        }
+        if (stuck(playerPos)) {
+            pathing.stop();
+            repathCooldown = PlanePickupSettings.STUCK_REPATH_COOLDOWN_TICKS;
+            stuckTicks = 0;
+        }
+
         endermanLookSafety.lookDownIfUnsafe();
         pathing.applySafety();
         active = true;
 
         UUID nextId = target.getUuid();
-        BlockPos nextPos = target.getBlockPos();
         boolean changedTarget = recovery.observeTarget(nextId, nextPos);
         if (changedTarget) {
             repathCooldown = 0;
@@ -91,8 +122,26 @@ final class PlaneItemPickupNavigator implements PlaneDroppedItemPickupWorkflow.N
         repathCooldown = 0;
         recovery.reset();
         nudger.stop();
+        stuckTicks = 0;
+        lastPlayerPos = null;
         if (pathing != null) pathing.restoreSafety();
         endermanLookSafety.lookDownIfUnsafe();
+    }
+
+    private boolean stuck(BlockPos playerPos) {
+        if (playerPos == null || !active || !isPathing()) {
+            lastPlayerPos = playerPos == null ? null : playerPos.toImmutable();
+            stuckTicks = 0;
+            return false;
+        }
+
+        boolean samePos = playerPos.equals(lastPlayerPos);
+        boolean jumping = mc.options != null && mc.options.jumpKey.isPressed();
+        lastPlayerPos = playerPos.toImmutable();
+        if (samePos && jumping) stuckTicks++;
+        else stuckTicks = 0;
+
+        return stuckTicks >= PlanePickupSettings.STUCK_JUMP_TICKS;
     }
 
     private boolean isPathing() {

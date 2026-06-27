@@ -7,6 +7,7 @@ final class PlaneInventoryMover {
     private final MinecraftClient mc = MinecraftClient.getInstance();
     private final PlaneActionGuards guards;
     private final PlaneInventory inventory;
+    private final PlaneHotbarMutationGuard mutationGuard = new PlaneHotbarMutationGuard();
 
     PlaneInventoryMover(PlaneActionGuards guards, PlaneInventory inventory) {
         this.guards = guards;
@@ -14,35 +15,40 @@ final class PlaneInventoryMover {
     }
 
     void ensureBuildBlockInHotbar() {
-        ensureInventorySlotInHotbar(findInventoryBuildBlockSlot());
+        ensureInventorySlotInHotbar("build-block", findInventoryBuildBlockSlot());
     }
 
     void ensureEnderChestShulkerInHotbar() {
-        ensureInventorySlotInHotbar(findInventoryEnderChestShulkerSlot());
+        ensureInventorySlotInHotbar("ender-chest-shulker", findInventoryEnderChestShulkerSlot());
     }
 
     void ensureEnderChestInHotbar() {
-        ensureInventorySlotInHotbar(findInventoryEnderChestSlot());
+        ensureInventorySlotInHotbar("ender-chest", findInventoryEnderChestSlot());
     }
 
     void ensurePickaxeInHotbar() {
-        ensureInventorySlotInHotbar(findInventoryPickaxeSlot());
+        ensureInventorySlotInHotbar("pickaxe", findInventoryPickaxeSlot());
     }
 
     void ensureBowInHotbar() {
-        ensureInventorySlotInHotbar(findInventoryBowSlot());
+        ensureInventorySlotInHotbar("bow", findInventoryBowSlot());
     }
 
     void ensureSwordInHotbar() {
-        ensureInventorySlotInHotbar(findInventorySwordSlot());
+        ensureInventorySlotInHotbar("sword", findInventorySwordSlot());
     }
 
-    private void ensureInventorySlotInHotbar(int sourceSlot) {
+    void resetMutationGuard() {
+        mutationGuard.reset();
+    }
+
+    private void ensureInventorySlotInHotbar(String itemRole, int sourceSlot) {
         if (mc.player == null || mc.interactionManager == null) return;
         if (!guards.readyForHotbarMutation()) return;
 
         int hotbarSlot = findHotbarSwapTarget();
         if (sourceSlot < 0 || hotbarSlot < 0) return;
+        if (!mutationGuard.allow(itemRole, sourceSlot, hotbarSlot, mc.player.getInventory().getSelectedSlot())) return;
 
         mc.interactionManager.clickSlot(
             mc.player.playerScreenHandler.syncId,

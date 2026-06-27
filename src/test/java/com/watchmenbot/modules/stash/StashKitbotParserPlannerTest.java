@@ -25,6 +25,7 @@ public final class StashKitbotParserPlannerTest {
         StashKitbotStatsHudPureTest.run();
         expiresTimerByElapsedTime();
         keepsSkipReasonWireValues();
+        formatsReturnCommands();
     }
 
     private static void readsAndWritesAtomicJsonFiles() {
@@ -65,6 +66,29 @@ public final class StashKitbotParserPlannerTest {
         assertEquals("unexpected-screen", StashSkipReasons.UNEXPECTED_SCREEN, "unexpected screen skip reason");
         assertEquals("open-timeout", StashSkipReasons.OPEN_TIMEOUT, "open timeout skip reason");
         assertEquals("closed-screen", StashSkipReasons.CLOSED_SCREEN, "closed screen skip reason");
+    }
+
+    private static void formatsReturnCommands() {
+        assertEquals(
+            "/kill",
+            StashKitbotReturnCommand.command(StashKitbotReturnCommand.ReturnMethod.KILL, "/home stash", ""),
+            "kill return method uses built-in kill command"
+        );
+        assertEquals(
+            "/home stash",
+            StashKitbotReturnCommand.command(StashKitbotReturnCommand.ReturnMethod.HOME, "/home stash", ""),
+            "home return method uses configured home command"
+        );
+        assertEquals(
+            "/spawn",
+            StashKitbotReturnCommand.command(StashKitbotReturnCommand.ReturnMethod.CUSTOM, "/home stash", " /spawn "),
+            "custom return method trims configured command"
+        );
+        assertEquals(
+            "/kill",
+            StashKitbotReturnCommand.command(StashKitbotReturnCommand.ReturnMethod.CUSTOM, "/home stash", ""),
+            "blank custom return command falls back to kill"
+        );
     }
 
     private static void sleep(long millis) {

@@ -26,6 +26,7 @@ final class PlaneReplenishCleanupPureTest {
         plansTrashFallWaitDecisions();
         timesOutPersistentTrashDropWait();
         tracksTrashCleanupCycleExhaustion();
+        ignoresUnsafePickupTargets();
     }
 
     private static void plansReplenishDropCleanupTransitions() {
@@ -224,6 +225,29 @@ final class PlaneReplenishCleanupPureTest {
         recovery.reset();
         assertEquals(0, recovery.idleRepaths(), "reset clears idle repath count");
         assertEquals(0, recovery.nudgeTicksRemaining(), "reset clears active nudge");
+    }
+
+    private static void ignoresUnsafePickupTargets() {
+        Object unsafeDrop = new Object();
+        PlaneTestPickupNavigator navigator = new PlaneTestPickupNavigator();
+        PlaneDroppedItemPickupWorkflow<Object> workflow = new PlaneDroppedItemPickupWorkflow<>(
+            () -> unsafeDrop,
+            item -> item == unsafeDrop,
+            item -> true,
+            item -> false,
+            (target, phase, reason) -> {
+            },
+            navigator,
+            Phase.PICKING_UP_REPLENISH_DROPS,
+            Phase.MOVING_TO_TRASH_EDGE,
+            0,
+            10,
+            false
+        );
+
+        assertFalse(workflow.hasTarget(), "unsafe pickup target is not acquired");
+        assertEquals(Phase.MOVING_TO_TRASH_EDGE, workflow.tick(), "unsafe pickup target falls back");
+        assertEquals(0, navigator.pathTicks, "unsafe pickup target is never sent to navigator");
     }
 
     private static void matchesReplenishCleanupStacks() {

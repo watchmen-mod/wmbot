@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.stash;
 
 import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
 import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
@@ -19,7 +20,9 @@ record StashKitbotSettings(
     Setting<Integer> openTimeoutTicks,
     Setting<Integer> maxRequestCount,
     Setting<String> tpaCommand,
+    Setting<StashKitbotReturnCommand.ReturnMethod> returnMethod,
     Setting<String> homeCommand,
+    Setting<String> customReturnCommand,
     Setting<Integer> deliveryDistance,
     Setting<Integer> teleportTimeoutTicks,
     Setting<Integer> deliveryTimeoutTicks,
@@ -142,11 +145,28 @@ record StashKitbotSettings(
             .build()
         );
 
+        Setting<StashKitbotReturnCommand.ReturnMethod> returnMethod = delivery.add(new EnumSetting.Builder<StashKitbotReturnCommand.ReturnMethod>()
+            .name("return-method")
+            .description("How the kitbot returns after delivery. /kill is reliable only when spawn or bed is safely set.")
+            .defaultValue(StashKitbotReturnCommand.ReturnMethod.KILL)
+            .build()
+        );
+
         Setting<String> homeCommand = delivery.add(new StringSetting.Builder()
             .name("home-command")
-            .description("Command used after delivery or after a post-teleport failure.")
-            .defaultValue("/home stash")
-            .placeholder("/home stash")
+            .description("Home command used when return-method is HOME.")
+            .defaultValue(StashKitbotReturnCommand.DEFAULT_HOME_COMMAND)
+            .placeholder(StashKitbotReturnCommand.DEFAULT_HOME_COMMAND)
+            .visible(() -> returnMethod.get() == StashKitbotReturnCommand.ReturnMethod.HOME)
+            .build()
+        );
+
+        Setting<String> customReturnCommand = delivery.add(new StringSetting.Builder()
+            .name("custom-return-command")
+            .description("Custom return command used when return-method is CUSTOM.")
+            .defaultValue("")
+            .placeholder("/spawn")
+            .visible(() -> returnMethod.get() == StashKitbotReturnCommand.ReturnMethod.CUSTOM)
             .build()
         );
 
@@ -257,7 +277,9 @@ record StashKitbotSettings(
             openTimeoutTicks,
             maxRequestCount,
             tpaCommand,
+            returnMethod,
             homeCommand,
+            customReturnCommand,
             deliveryDistance,
             teleportTimeoutTicks,
             deliveryTimeoutTicks,

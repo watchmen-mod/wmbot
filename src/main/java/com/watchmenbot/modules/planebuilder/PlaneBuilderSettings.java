@@ -64,7 +64,14 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        return new CompanionModules(autoTotem, autoEat, velocity, instantRebreak, killAura);
+        Setting<Boolean> noRender = group.add(new BoolSetting.Builder()
+            .name("performance-no-render")
+            .description("Optionally enables safe NoRender performance defaults while Plane Builder is active.")
+            .defaultValue(false)
+            .build()
+        );
+
+        return new CompanionModules(autoTotem, autoEat, velocity, instantRebreak, killAura, noRender);
     }
 
     static BowDefense bowDefense(SettingGroup group) {
@@ -227,7 +234,8 @@ final class PlaneBuilderSettings {
         Setting<Boolean> autoEat,
         Setting<Boolean> velocity,
         Setting<Boolean> instantRebreak,
-        Setting<Boolean> killAura
+        Setting<Boolean> killAura,
+        Setting<Boolean> noRender
     ) {
     }
 

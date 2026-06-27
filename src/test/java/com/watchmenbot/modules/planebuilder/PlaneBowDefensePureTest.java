@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.planebuilder;
 
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.Optional;
@@ -16,7 +17,9 @@ final class PlaneBowDefensePureTest {
     static void run() {
         gatesBowDefense();
         gatesBowDefenseRelease();
+        gatesReliableBowFiringPolicy();
         solvesBowAimForStationaryTargets();
+        selectsCenterMassAimPoint();
         leadsMovingBowTargets();
         rejectsImpossibleBowAim();
         keepsBowDefenseAvailableDuringReplenishPhases();
@@ -86,16 +89,28 @@ final class PlaneBowDefensePureTest {
 
     private static void gatesBowDefenseRelease() {
         assertFalse(
-            PlaneBowDefenseDecisions.shouldRelease(19, 20, 2, 2),
-            "bow defense does not release before required charge"
+            PlaneBowDefenseDecisions.shouldRelease(24, 25, 2, 2),
+            "bow defense holds past vanilla full charge for a reliable full-draw release"
         );
         assertFalse(
-            PlaneBowDefenseDecisions.shouldRelease(20, 20, 1, 2),
+            PlaneBowDefenseDecisions.shouldRelease(25, 25, 1, 2),
             "bow defense does not release before the direct-hit prediction is stable"
         );
         assertTrue(
-            PlaneBowDefenseDecisions.shouldRelease(20, 20, 2, 2),
-            "bow defense releases after charge when prediction is stable on the locked target"
+            PlaneBowDefenseDecisions.shouldRelease(25, 25, 2, 2),
+            "bow defense releases after buffered full charge when prediction is stable on the locked target"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.shouldReleaseWhenPredictionUnavailable(24, 25, 8, 8),
+            "unavailable prediction fallback still waits for buffered full draw"
+        );
+        assertFalse(
+            PlaneBowDefenseDecisions.shouldReleaseWhenPredictionUnavailable(25, 25, 7, 8),
+            "unavailable prediction fallback requires sustained valid aim"
+        );
+        assertTrue(
+            PlaneBowDefenseDecisions.shouldReleaseWhenPredictionUnavailable(25, 25, 8, 8),
+            "unavailable prediction fallback releases only after sustained valid full-draw aim"
         );
         assertFalse(
             PlaneBowDefenseDecisions.timedOutWaitingForDirectHit(29, 30),
@@ -107,12 +122,60 @@ final class PlaneBowDefensePureTest {
         );
     }
 
+    private static void gatesReliableBowFiringPolicy() {
+        assertFalse(PlaneBowFiringPolicy.drawStarted(false, 30), "draw is not confirmed without using-item state");
+        assertFalse(PlaneBowFiringPolicy.drawStarted(true, 0), "draw is not confirmed before use ticks advance");
+        assertTrue(PlaneBowFiringPolicy.drawStarted(true, 1), "draw is confirmed from real use ticks");
+        assertTrue(PlaneBowFiringPolicy.drawStartTimedOut(PlaneBowFiringPolicy.DRAW_START_TIMEOUT_TICKS), "draw start timeout trips at the configured limit");
+        assertFalse(PlaneBowFiringPolicy.enoughDraw(29), "reliable draw does not release before 30 real use ticks");
+        assertTrue(PlaneBowFiringPolicy.enoughDraw(30), "reliable draw uses 30 real use ticks");
+        assertTrue(PlaneBowFiringPolicy.drawStalled(false, 10, 9, 0), "draw stalls when item use stops");
+        assertTrue(PlaneBowFiringPolicy.drawStalled(true, 10, 10, PlaneBowFiringPolicy.DRAW_STALL_TIMEOUT_TICKS), "draw stalls when use ticks stop advancing");
+
+        PlaneBowAimController.Aim previous = new PlaneBowAimController.Aim(10.0, -5.0, Vec3d.ZERO);
+        PlaneBowAimController.Aim stable = new PlaneBowAimController.Aim(11.0, -4.5, Vec3d.ZERO);
+        PlaneBowAimController.Aim unstable = new PlaneBowAimController.Aim(15.0, -4.5, Vec3d.ZERO);
+        assertTrue(PlaneBowFiringPolicy.aimStable(previous, stable), "small aim changes count as settled");
+        assertFalse(PlaneBowFiringPolicy.aimStable(previous, unstable), "large aim changes reset settle confidence");
+        assertFalse(
+            PlaneBowFiringPolicy.shouldReleaseDirect(30, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS - 1, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
+            "direct release waits for rotation settle"
+        );
+        assertTrue(
+            PlaneBowFiringPolicy.shouldReleaseDirect(30, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
+            "direct release requires draw, settle, and direct-hit confidence"
+        );
+        assertFalse(
+            PlaneBowFiringPolicy.shouldReleaseFallback(
+                30,
+                PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS,
+                PlaneBowFiringPolicy.REQUIRED_FALLBACK_AIM_TICKS,
+                PlaneBowFiringPolicy.MAX_FALLBACK_TARGET_SPEED_SQUARED + 0.01
+            ),
+            "fallback release rejects fast-moving targets"
+        );
+        assertTrue(
+            PlaneBowFiringPolicy.shouldReleaseFallback(
+                30,
+                PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS,
+                PlaneBowFiringPolicy.REQUIRED_FALLBACK_AIM_TICKS,
+                0.0
+            ),
+            "fallback release allows stable targets after strict confidence gates"
+        );
+    }
+
     private static void solvesBowAimForStationaryTargets() {
         Vec3d shooter = new Vec3d(0.0, 65.6, 0.0);
 
         assertValidAim(shooter, new Vec3d(4.6, 65.6, 0.0), "close stationary target has a bow aim solution");
         assertValidAim(shooter, new Vec3d(12.0, 65.6, 0.0), "mid-range stationary target has a bow aim solution");
         assertValidAim(shooter, new Vec3d(20.0, 65.6, 0.0), "long stationary target has a bow aim solution");
+    }
+
+    private static void selectsCenterMassAimPoint() {
+        Vec3d point = PlaneBowAimController.aimPoint(new Box(1.0, 64.0, 2.0, 2.0, 66.0, 3.0));
+        assertEquals(new Vec3d(1.5, 65.1, 2.5), point, "bow aim point targets center mass instead of feet or head");
     }
 
     private static void leadsMovingBowTargets() {
