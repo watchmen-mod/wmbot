@@ -26,7 +26,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         retriesPendingKitbotRefillAfterLongWait();
         suppressesRetryAfterKitbotAcceptsRequest();
         clearsPendingRequestAfterKitbotTeleportTimeout();
-        doesNotRequestKitbotTwiceInOneReplenishCycle();
+        requestsKitbotAgainAfterCompletedDeliveryInSameRun();
         clearsPendingKitbotWhenLocalSupplyRecovers();
     }
 
@@ -193,6 +193,8 @@ final class PlaneKitbotRefillSupplyPureTest {
 
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.requestOrMissingSupply(messenger), "delivery request starts pending wait");
         assertTrue(delivery.pending(), "delivery tracker records pending request");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.requestOrMissingSupply(messenger), "pending delivery keeps waiting");
+        assertEquals(1, sent.size(), "pending delivery does not duplicate request");
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.inventoryDeliveryPhase(), "baseline supply does not complete request");
         supply.looseEnderChestCount = 3;
         assertEquals(Phase.PLACING_ENDER_CHEST, delivery.inventoryDeliveryPhase(), "increased loose supply completes request");
@@ -200,10 +202,11 @@ final class PlaneKitbotRefillSupplyPureTest {
         assertFalse(delivery.pending(), "marking supplies clears pending request");
 
         supply.looseEnderChestCount = 0;
-        assertEquals(Phase.MISSING_ENDER_CHEST_SHULKER, delivery.requestOrMissingSupply(messenger), "same cycle does not request twice");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.requestOrMissingSupply(messenger), "same run can request again after completed delivery");
+        assertEquals(2, sent.size(), "delivery tracker sends a second request after resolved supply is consumed");
         delivery.beginReplenishCycle();
-        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.requestOrMissingSupply(messenger), "new cycle can request again");
-        assertEquals(2, sent.size(), "delivery tracker sends one request per replenish cycle");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, delivery.requestOrMissingSupply(messenger), "new cycle keeps pending second request");
+        assertEquals(2, sent.size(), "new cycle does not duplicate pending second request");
     }
 
     private static void waitsWhenOnlyStaleSupplyExistsAtRequest() {
@@ -375,7 +378,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         assertEquals(2, sent.size(), "cancelled delivery does not immediately send another request");
     }
 
-    private static void doesNotRequestKitbotTwiceInOneReplenishCycle() {
+    private static void requestsKitbotAgainAfterCompletedDeliveryInSameRun() {
         List<String> sent = new ArrayList<>();
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
@@ -393,20 +396,22 @@ final class PlaneKitbotRefillSupplyPureTest {
         workflow.beginReplenishCycle();
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "first missing supply requests kitbot");
         assertEquals(1, sent.size(), "first cycle sends one kitbot request");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "pending request keeps waiting");
+        assertEquals(1, sent.size(), "pending request does not send duplicate kitbot request");
         supply.looseEnderChestCount = 1;
         assertEquals(Phase.PLACING_ENDER_CHEST, workflow.waitForDelivery(), "delivered supply completes pending wait");
 
         supply.looseEnderChestCount = 0;
         assertEquals(
-            Phase.MISSING_ENDER_CHEST_SHULKER,
+            Phase.WAITING_FOR_KITBOT_REFILL,
             workflow.afterServiceHoleClosed(),
-            "same replenish cycle does not ask kitbot again after a completed delivery"
+            "same run can request kitbot again after delivered supply was consumed"
         );
-        assertEquals(1, sent.size(), "same replenish cycle does not send a second kitbot request");
+        assertEquals(2, sent.size(), "same run sends a second kitbot request after completed delivery");
 
         workflow.beginReplenishCycle();
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "new replenish cycle may request kitbot again");
-        assertEquals(2, sent.size(), "new replenish cycle sends a new kitbot request");
+        assertEquals(2, sent.size(), "pending second request is not duplicated by a new replenish cycle");
     }
 
     private static void clearsPendingKitbotWhenLocalSupplyRecovers() {
@@ -429,10 +434,10 @@ final class PlaneKitbotRefillSupplyPureTest {
 
         supply.looseEnderChestCount = 0;
         assertEquals(
-            Phase.MISSING_ENDER_CHEST_SHULKER,
+            Phase.WAITING_FOR_KITBOT_REFILL,
             workflow.afterServiceHoleClosed(),
-            "same cycle does not ask kitbot again after local recovery cleared pending"
+            "same run can request kitbot again after local recovery supply was consumed"
         );
-        assertEquals(1, sent.size(), "cleared pending kitbot does not create a premature second request");
+        assertEquals(2, sent.size(), "local recovery clears guard so later missing supply can request again");
     }
 }
