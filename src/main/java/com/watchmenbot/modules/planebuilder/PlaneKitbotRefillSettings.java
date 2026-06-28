@@ -43,22 +43,6 @@ final class PlaneKitbotRefillSettings {
             .build()
         );
 
-        Setting<String> whisperCommand = group.add(new StringSetting.Builder()
-            .name("kitbot-whisper-command")
-            .description("Whisper command used to request a kitbot refill.")
-            .defaultValue("/w")
-            .placeholder("/w")
-            .build()
-        );
-
-        Setting<String> teleportAcceptCommand = group.add(new StringSetting.Builder()
-            .name("kitbot-teleport-accept-command")
-            .description("Command used to accept the kitbot teleport request.")
-            .defaultValue("/tpy")
-            .placeholder("/tpy")
-            .build()
-        );
-
-        return new PlaneBuilderSettings.KitbotRefill(enabled, nickname, kitName, kitCount, whisperCommand, teleportAcceptCommand);
+        return new PlaneBuilderSettings.KitbotRefill(enabled, nickname, kitName, kitCount);
     }
 }

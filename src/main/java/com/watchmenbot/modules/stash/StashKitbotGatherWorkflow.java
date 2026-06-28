@@ -88,6 +88,12 @@ final class StashKitbotGatherWorkflow {
 
         KitSource source = sourceIndex.isEmpty() ? null : request.sources.get(sourceIndex.getAsInt());
         if (source == null) {
+            events.warning("Failed to start stash kit gather for %s: no live source for '%s' after collecting %d/%d.",
+                request.requester,
+                request.kitName,
+                request.gather.gathered,
+                request.count
+            );
             events.failRequest("Could not find enough live '%s' shulkers. Collected %d/%d.".formatted(
                 request.kitName,
                 request.gather.gathered,
@@ -106,8 +112,24 @@ final class StashKitbotGatherWorkflow {
 
         request.gather.sourceIndex = sourceIndex.getAsInt();
         session.currentTarget(target);
+        events.info("Selected stash kit source at %s for %s/%s (%d/%d gathered).",
+            StashClientUtils.formatPos(target.interactionPos()),
+            request.requester,
+            request.kitName,
+            request.gather.gathered,
+            request.count
+        );
         if (isCloseEnough(target, settings)) {
-            interactWithCurrent(settings);
+            if (interactWithCurrent(settings)) notifyGatherStarted(request);
+            return;
+        }
+
+        if (!navigator.canPath()) {
+            events.warning("Failed to start stash kit gather for %s: pathing is unavailable and source at %s is out of range.",
+                request.requester,
+                StashClientUtils.formatPos(target.interactionPos())
+            );
+            events.failRequest("Could not start gathering '%s' because pathing is unavailable and the source is out of reach.".formatted(request.kitName));
             return;
         }
 
@@ -127,7 +149,13 @@ final class StashKitbotGatherWorkflow {
         session.beginGatherPhase(KitbotPhase.PATHING, settings.pathTimeoutTicks());
         pathProgress.reset(target, mc.player.getBlockPos(), mc.player.getEyePos());
         pathThrottle.recordPathStart();
-        navigator.pathToScannerTarget(target, settings.interactionRange(), standingPos);
+        if (!navigator.pathToScannerTarget(target, settings.interactionRange(), standingPos)) {
+            session.phase(KitbotPhase.IDLE);
+            pathThrottle.recordPathFailure(target, mc.player.getBlockPos());
+            skipCurrentSource(StashSkipReasons.PATH_TIMEOUT);
+            return;
+        }
+        notifyGatherStarted(request);
         events.info("Pathing to stash kit source at %s.", StashClientUtils.formatPos(target.interactionPos()));
     }
 
@@ -146,7 +174,7 @@ final class StashKitbotGatherWorkflow {
 
         if (isCloseEnough(target, settings)) {
             navigator.stop();
-            interactWithCurrent(settings);
+            if (interactWithCurrent(settings)) notifyGatherStarted(session.activeRequest());
             return;
         }
 
@@ -172,15 +200,20 @@ final class StashKitbotGatherWorkflow {
             return;
         }
 
-        navigator.ensureScannerPathTo(target, settings.interactionRange(), standingPos);
+        if (!navigator.ensureScannerPathTo(target, settings.interactionRange(), standingPos)) {
+            navigator.stop();
+            pathThrottle.recordPathFailure(target, mc.player.getBlockPos());
+            skipCurrentSource(StashSkipReasons.PATH_TIMEOUT);
+        }
     }
 
-    private void interactWithCurrent(Settings settings) {
+    private boolean interactWithCurrent(Settings settings) {
         StashTarget target = session.currentTarget();
-        if (target == null || !StashClientUtils.canUse(mc)) return;
+        if (target == null || !StashClientUtils.canUse(mc)) return false;
 
         interactor.interactWithTarget(target, () -> StashClientUtils.canUse(mc) && session.currentTarget() != null && session.currentTarget().id().equals(target.id()));
         session.beginGatherPhase(KitbotPhase.OPENING, settings.openTimeoutTicks());
+        return true;
     }
 
     private void tickOpening(Settings settings) {
@@ -293,11 +326,23 @@ final class StashKitbotGatherWorkflow {
     private void skipCurrentSource(String reason) {
         StashTarget target = session.currentTarget();
         KitRequest request = session.activeRequest();
-        events.warning("Skipped kit source at %s: %s.", target == null ? "unknown" : StashClientUtils.formatPos(target.interactionPos()), reason);
+        events.warning("Skipped kit source at %s for %s/%s: %s.",
+            target == null ? "unknown" : StashClientUtils.formatPos(target.interactionPos()),
+            request == null ? "unknown" : request.requester,
+            request == null ? "unknown" : request.kitName,
+            reason
+        );
         markSourceSkipped(request, request.gather.sourceIndex);
         clearPendingTransfer(request);
         session.clearCurrentTarget();
         session.phase(KitbotPhase.IDLE);
+    }
+
+    private void notifyGatherStarted(KitRequest request) {
+        if (request == null || request.gather.gatherStartNotified) return;
+
+        request.gather.gatherStartNotified = true;
+        events.reply(request.requester, "Gathering '%s' x%d now.".formatted(request.kitName, request.count));
     }
 
     private void completeRequest(Settings settings) {

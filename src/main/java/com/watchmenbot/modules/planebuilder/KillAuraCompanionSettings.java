@@ -16,6 +16,7 @@ import java.util.UUID;
 final class KillAuraCompanionSettings {
     static final int MAX_TARGETS = 5;
 
+    private static final String WEAPON = "weapon";
     private static final String ENTITIES = "entities";
     private static final String AUTO_SWITCH = "auto-switch";
     private static final String SWAP_BACK = "swap-back";
@@ -26,14 +27,11 @@ final class KillAuraCompanionSettings {
     }
 
     static List<CompanionModuleManager.SettingSnapshot> apply(KillAura killAura) {
-        List<CompanionModuleManager.SettingSnapshot> snapshots = List.of(
-            snapshot(killAura, ENTITIES),
-            snapshot(killAura, AUTO_SWITCH),
-            snapshot(killAura, SWAP_BACK),
-            snapshot(killAura, MAX_TARGETS_SETTING),
-            snapshot(killAura, MOB_AGE_FILTER)
-        );
+        List<CompanionModuleManager.SettingSnapshot> snapshots = sessionSettingNames().stream()
+            .map(name -> snapshot(killAura, name))
+            .toList();
 
+        setting(killAura, WEAPON, KillAura.Weapon.class).set(sessionWeapon());
         setting(killAura, ENTITIES, Set.class).set(entities());
         setting(killAura, AUTO_SWITCH, Boolean.class).set(true);
         setting(killAura, SWAP_BACK, Boolean.class).set(true);
@@ -41,6 +39,21 @@ final class KillAuraCompanionSettings {
         setting(killAura, MOB_AGE_FILTER, KillAura.EntityAge.class).set(KillAura.EntityAge.Both);
 
         return snapshots;
+    }
+
+    static List<String> sessionSettingNames() {
+        return List.of(
+            WEAPON,
+            ENTITIES,
+            AUTO_SWITCH,
+            SWAP_BACK,
+            MAX_TARGETS_SETTING,
+            MOB_AGE_FILTER
+        );
+    }
+
+    static KillAura.Weapon sessionWeapon() {
+        return KillAura.Weapon.Sword;
     }
 
     static Set<EntityType<?>> entities() {

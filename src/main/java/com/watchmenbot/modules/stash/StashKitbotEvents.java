@@ -6,6 +6,8 @@ interface StashKitbotEvents extends WorkflowLogger {
 
     void reply(String player, String message);
 
+    void queueReply(String player, String message);
+
     void failRequest(String message);
 
     void delivered(KitRequest request);

@@ -9,6 +9,7 @@ final class PlaneCoordinatorSafetyWorkflow {
     private final PlaneHoleEscapeController holeEscape;
     private final PlaneBuildLoop buildLoop;
     private final PlaneReplenishWorkflow replenish;
+    private final PlaneMeleeDefenseWorkflow meleeDefense;
     private final PlaneBowDefenseWorkflow bowDefense;
     private final PlaneEndermanLookSafety endermanLookSafety;
     private final Callbacks callbacks;
@@ -20,6 +21,7 @@ final class PlaneCoordinatorSafetyWorkflow {
         PlaneHoleEscapeController holeEscape,
         PlaneBuildLoop buildLoop,
         PlaneReplenishWorkflow replenish,
+        PlaneMeleeDefenseWorkflow meleeDefense,
         PlaneBowDefenseWorkflow bowDefense,
         PlaneEndermanLookSafety endermanLookSafety,
         Callbacks callbacks
@@ -30,6 +32,7 @@ final class PlaneCoordinatorSafetyWorkflow {
         this.holeEscape = holeEscape;
         this.buildLoop = buildLoop;
         this.replenish = replenish;
+        this.meleeDefense = meleeDefense;
         this.bowDefense = bowDefense;
         this.endermanLookSafety = endermanLookSafety;
         this.callbacks = callbacks;
@@ -66,10 +69,23 @@ final class PlaneCoordinatorSafetyWorkflow {
     boolean tickSafetyBeforeReplenish(BlockPos playerPos) {
         Phase displayPhase = callbacks.currentPhase();
 
+        if (meleeDefense.hasImmediateThreat()) {
+            if (preemptManagedScreenForMeleeThreat()) return true;
+            if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.SAFETY)) return true;
+            autoWalk.suspend();
+            holeEscape.reset();
+            bowDefense.reset();
+            meleeDefense.tick();
+            endermanLookSafety.lookDown();
+            tickReplenishDuringSafetyPreemption(displayPhase);
+            callbacks.setPhase(Phase.IDLE);
+            return true;
+        }
+
         if (bowDefense.hasImmediateThreat(24.0)) {
             if (preemptManagedScreenForThreat()) return true;
             if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.BOW_DEFENSE)) return true;
-            autoWalk.pause();
+            autoWalk.suspend();
             holeEscape.reset();
             endermanLookSafety.lookDown();
             tickReplenishDuringSafetyPreemption(displayPhase);
@@ -79,7 +95,7 @@ final class PlaneCoordinatorSafetyWorkflow {
 
         if (PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(displayPhase, false, guards.playerUsingItem())) {
             if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.SAFETY)) return true;
-            autoWalk.pause();
+            autoWalk.suspend();
             holeEscape.reset();
             bowDefense.reset();
             endermanLookSafety.lookDown();
@@ -94,7 +110,7 @@ final class PlaneCoordinatorSafetyWorkflow {
 
             if (PlaneCoordinatorTickPolicy.shouldPreemptReplenishForSafety(displayPhase, bowDefense.hasSafetyOpportunity(bowReplenishActive), false)) {
                 if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.BOW_DEFENSE)) return true;
-                autoWalk.pause();
+                autoWalk.suspend();
                 holeEscape.reset();
                 endermanLookSafety.lookDown();
                 callbacks.setPhase(Phase.IDLE);
@@ -135,11 +151,24 @@ final class PlaneCoordinatorSafetyWorkflow {
         return true;
     }
 
+    boolean tickMeleeDefenseOwner(PlaneCoordinatorTickPolicy.TickOwner owner, BlockPos playerPos) {
+        if (owner != PlaneCoordinatorTickPolicy.TickOwner.MELEE_DEFENSE) return false;
+
+        if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.SAFETY)) return true;
+        autoWalk.suspend();
+        autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.SAFETY);
+        holeEscape.reset();
+        bowDefense.reset();
+        endermanLookSafety.lookDownIfUnsafe();
+        callbacks.setPhase(Phase.IDLE);
+        return true;
+    }
+
     boolean tickBowDefenseOwner(PlaneCoordinatorTickPolicy.TickOwner owner, BlockPos playerPos) {
         if (owner != PlaneCoordinatorTickPolicy.TickOwner.BOW_DEFENSE) return false;
 
         if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.BOW_DEFENSE)) return true;
-        autoWalk.pause();
+        autoWalk.suspend();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.BOW_DEFENSE);
         holeEscape.reset();
         endermanLookSafety.lookDownIfUnsafe();
@@ -151,7 +180,7 @@ final class PlaneCoordinatorSafetyWorkflow {
         if (owner != PlaneCoordinatorTickPolicy.TickOwner.GUARD_PAUSED) return false;
 
         if (landAutoElytraForSafety(playerPos, PlaneAutoWalkController.LockoutReason.GUARD_PAUSED)) return true;
-        autoWalk.pause();
+        autoWalk.suspend();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.GUARD_PAUSED);
         holeEscape.reset();
         bowDefense.reset();
@@ -169,9 +198,21 @@ final class PlaneCoordinatorSafetyWorkflow {
         if (!guards.managedScreenOpen()) return false;
         if (!bowDefense.hasSafetyOpportunity(bowReplenishActive)) return false;
 
-        autoWalk.pause();
+        autoWalk.suspend();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.BOW_DEFENSE);
         holeEscape.reset();
+        endermanLookSafety.lookDown();
+        if (guards.safeToCloseManagedScreen()) guards.closeManagedScreenForSafety();
+        return true;
+    }
+
+    private boolean preemptManagedScreenForMeleeThreat() {
+        if (!guards.managedScreenOpen()) return false;
+
+        autoWalk.suspend();
+        autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.SAFETY);
+        holeEscape.reset();
+        bowDefense.reset();
         endermanLookSafety.lookDown();
         if (guards.safeToCloseManagedScreen()) guards.closeManagedScreenForSafety();
         return true;
@@ -180,7 +221,7 @@ final class PlaneCoordinatorSafetyWorkflow {
     private boolean preemptManagedScreenForThreat() {
         if (!guards.managedScreenOpen()) return false;
 
-        autoWalk.pause();
+        autoWalk.suspend();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.BOW_DEFENSE);
         holeEscape.reset();
         endermanLookSafety.lookDown();

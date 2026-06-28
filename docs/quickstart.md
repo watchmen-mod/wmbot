@@ -61,11 +61,12 @@ The bot builds an obsidian plane at Y `319`. It scans nearby placement targets, 
 - `auto-eat`
 - `velocity`
 - `instant-rebreak`
+- `fullbright`
 - `kill-aura`
 
 `hole-escape` is also enabled by default. Leave it on so the bot can path out if it gets boxed into a one-block hole.
 
-`trash-hole-cleanup`, `pickaxe-durability-threshold-percent`, and `enderman-look-safety` are also set up with sane defaults.
+`trash-hole-cleanup`, `pickaxe-durability-threshold-percent`, `enderman-look-safety`, and `enderman-look-radius` are also set up with sane defaults.
 
 ## Options You Should Turn On
 
@@ -98,10 +99,8 @@ Check these settings before trusting it:
 - `kitbot-nickname`
 - `kitbot-kit-name`
 - `kitbot-kit-count`
-- `kitbot-whisper-command`
-- `kitbot-teleport-accept-command`
 
-Default kitbot refill settings target `whoahbuddy` and request `the watchmen's echest's`. Change those if your group uses a different kitbot or kit name.
+Default kitbot refill settings target `whoahbuddy` and request `the watchmen's echest's` using `/w` and `/tpy`. Change the nickname or kit name if your group uses a different kitbot or kit.
 
 If you do not have access to someone else's kitbot, host your own with the `stash-kitbot` module. Get your stash scanned/cache-ready first, then let `stash-kitbot` handle allowlisted whispers and deliveries.
 

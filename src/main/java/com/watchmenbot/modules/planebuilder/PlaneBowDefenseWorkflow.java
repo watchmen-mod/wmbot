@@ -87,7 +87,7 @@ final class PlaneBowDefenseWorkflow {
             return new BowDefenseTickResult(false);
         }
 
-        Entity target = targeting.nearestSafeBowTarget(settings.range().get());
+        Entity target = targeting.nearestSafeBowTarget(PlaneBuilderSettings.BOW_DEFENSE_RANGE);
         FindItemResult bow = target == null ? inventory.findHotbarBow() : inventory.prepareUsableBow();
         boolean canRun = PlaneBowDefenseDecisions.canRun(
             settings.enabled().get(),
@@ -114,7 +114,7 @@ final class PlaneBowDefenseWorkflow {
     boolean hasSafetyOpportunity(boolean replenishActive) {
         if (!guards.clientReady()) return false;
 
-        Entity target = targeting.nearestSafeBowTarget(settings.range().get());
+        Entity target = targeting.nearestSafeBowTarget(PlaneBuilderSettings.BOW_DEFENSE_RANGE);
         return PlaneBowDefenseDecisions.canRun(
             settings.enabled().get(),
             replenishActive,
@@ -163,6 +163,7 @@ final class PlaneBowDefenseWorkflow {
             stopShot(moduleSession.passiveLatched());
             return false;
         }
+        if (state == BowState.POST_RELEASE) return tickPostRelease();
         if (releaseQueued) {
             useActions.holdUse();
             return true;
@@ -170,7 +171,7 @@ final class PlaneBowDefenseWorkflow {
         if (state == BowState.RECOVER) return tickRecover();
 
         Entity target = targeting.lockedTarget(lockedTargetId);
-        PlaneBowTargeting.BowTargetStatus targetStatus = targeting.bowTargetStatus(target, settings.range().get());
+        PlaneBowTargeting.BowTargetStatus targetStatus = targeting.bowTargetStatus(target, PlaneBuilderSettings.BOW_DEFENSE_RANGE);
         if (targetStatus != PlaneBowTargeting.BowTargetStatus.READY) {
             recover("Bow defense cancelled: %s useTicks=%d selectedSlot=%d mainHand=%s.",
                 targetStatus.logReason(),
@@ -186,7 +187,7 @@ final class PlaneBowDefenseWorkflow {
             case DRAWING -> tickDrawing(target);
             case AIM_SETTLE -> tickAimSettle(target);
             case RELEASE -> tickRelease();
-            case IDLE, RECOVER -> false;
+            case IDLE, POST_RELEASE, RECOVER -> false;
         };
     }
 
@@ -301,23 +302,25 @@ final class PlaneBowDefenseWorkflow {
             return queueReleaseAfterAimedRotation(
                 target,
                 currentAim,
-                "Bow defense releasing confirmed direct-hit shot at %s useTicks=%d distance=%.1f settleTicks=%d.",
+                "Bow defense releasing confirmed direct-hit shot at %s useTicks=%d distance=%.1f settleTicks=%d cleanupDelayTicks=%d.",
                 target.getName().getString(),
                 useTicks,
                 target.distanceTo(useActions.player()),
-                aimSettleTicks
+                aimSettleTicks,
+                PlaneBowFiringPolicy.POST_RELEASE_CLEANUP_TICKS
             );
         }
         if (PlaneBowFiringPolicy.shouldReleaseFallback(useTicks, aimSettleTicks, fallbackAimTicks, targetVelocitySquared)) {
             return queueReleaseAfterAimedRotation(
                 target,
                 currentAim,
-                "Bow defense releasing simulator-unavailable fallback shot at %s useTicks=%d distance=%.1f settleTicks=%d targetSpeedSq=%.4f.",
+                "Bow defense releasing simulator-unavailable fallback shot at %s useTicks=%d distance=%.1f settleTicks=%d targetSpeedSq=%.4f cleanupDelayTicks=%d.",
                 target.getName().getString(),
                 useTicks,
                 target.distanceTo(useActions.player()),
                 aimSettleTicks,
-                targetVelocitySquared
+                targetVelocitySquared,
+                PlaneBowFiringPolicy.POST_RELEASE_CLEANUP_TICKS
             );
         }
 
@@ -340,6 +343,16 @@ final class PlaneBowDefenseWorkflow {
     private boolean tickRelease() {
         useActions.holdUse();
         return true;
+    }
+
+    private boolean tickPostRelease() {
+        useActions.clearUse();
+        stateTicks++;
+        if (!PlaneBowFiringPolicy.postReleaseCleanupComplete(stateTicks)) return true;
+
+        moduleSession.stopShot();
+        resetToIdle();
+        return false;
     }
 
     private boolean tickRecover() {
@@ -399,7 +412,7 @@ final class PlaneBowDefenseWorkflow {
             return true;
         }
 
-        useActions.holdUse();
+        if (releaseQueued && state == BowState.RELEASE) useActions.holdUse();
         return true;
     }
 
@@ -408,7 +421,8 @@ final class PlaneBowDefenseWorkflow {
 
         logInfo(message, args);
         useActions.release();
-        stopShot(moduleSession.passiveLatched());
+        releaseQueued = false;
+        transition(BowState.POST_RELEASE);
     }
 
     private void transition(BowState nextState) {
@@ -465,6 +479,7 @@ final class PlaneBowDefenseWorkflow {
         DRAWING,
         AIM_SETTLE,
         RELEASE,
+        POST_RELEASE,
         RECOVER
     }
 }

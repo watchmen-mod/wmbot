@@ -23,6 +23,8 @@ final class PlaneReplenishPureTest {
         tracksPendingEnderChestFarmProgress();
         PlaneReplenishManagedShulkerPureTest.run();
         classifiesServiceHoleStatuses();
+        tracksServiceHoleOpenWatchdog();
+        tracksBlockedServiceHoles();
         plansReplenishSourceTransitions();
         plansMissingEnderChestSourceRecovery();
         plansEnderChestInventoryRecovery();
@@ -239,6 +241,40 @@ final class PlaneReplenishPureTest {
         assertFalse(ServiceHoleContext.Status.READY_BUILD_BLOCK.openForReplenish(), "build block must be opened before replenish");
         assertFalse(ServiceHoleContext.Status.READY_BREAKABLE_CAP.openForReplenish(), "breakable cap must be opened before replenish");
         assertFalse(ServiceHoleContext.Status.INVALID_SUPPORT.readyForWorkflow(), "invalid support blocks workflow");
+    }
+
+    private static void tracksServiceHoleOpenWatchdog() {
+        ServiceHoleOpenWatchdog watchdog = new ServiceHoleOpenWatchdog(3);
+        BlockPos first = new BlockPos(1, 319, 1);
+        BlockPos second = new BlockPos(2, 319, 1);
+
+        assertFalse(watchdog.timeout(first, ServiceHoleContext.HoleBlock.BUILD_BLOCK), "first stale tick does not timeout");
+        assertFalse(watchdog.timeout(first, ServiceHoleContext.HoleBlock.BUILD_BLOCK), "second stale tick does not timeout");
+        assertTrue(watchdog.timeout(first, ServiceHoleContext.HoleBlock.BUILD_BLOCK), "third stale tick times out");
+
+        assertFalse(watchdog.timeout(second, ServiceHoleContext.HoleBlock.BUILD_BLOCK), "different hole resets stale open ticks");
+        assertEquals(1, watchdog.staleOpenTicks(), "reset target starts a fresh stale budget");
+
+        assertFalse(watchdog.timeout(second, ServiceHoleContext.HoleBlock.REPLACEABLE), "replaceable hole clears stale open tracking");
+        assertEquals(0, watchdog.staleOpenTicks(), "replaceable progress resets stale open ticks");
+
+        assertFalse(watchdog.timeout(second, ServiceHoleContext.HoleBlock.BREAKABLE_CAP), "breakable cap starts tracking");
+        assertFalse(watchdog.timeout(null, ServiceHoleContext.HoleBlock.BREAKABLE_CAP), "missing target clears stale open tracking");
+        assertEquals(0, watchdog.staleOpenTicks(), "missing target resets stale open ticks");
+
+        assertFalse(watchdog.timeout(first, ServiceHoleContext.HoleBlock.ENDER_CHEST), "non-opening block states are ignored");
+        assertEquals(0, watchdog.staleOpenTicks(), "ignored block states do not consume stale open budget");
+    }
+
+    private static void tracksBlockedServiceHoles() {
+        ServiceHoleContext serviceHole = new ServiceHoleContext(new PlaneAreaScanner());
+        BlockPos first = new BlockPos(4, 319, 4);
+
+        serviceHole.select(first);
+        serviceHole.markSelectedBlocked();
+
+        assertTrue(serviceHole.blocked(first), "timed-out service hole is recorded as blocked");
+        assertFalse(serviceHole.selected(), "marking a service hole blocked clears the active selection");
     }
 
     private static void plansReplenishSourceTransitions() {

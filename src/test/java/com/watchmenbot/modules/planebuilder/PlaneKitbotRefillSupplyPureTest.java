@@ -24,6 +24,8 @@ final class PlaneKitbotRefillSupplyPureTest {
         ignoresStaleDroppedKitbotSupplyAtRequest();
         waitsForNewDroppedKitbotDeliveryAfterRequest();
         retriesPendingKitbotRefillAfterLongWait();
+        suppressesRetryAfterKitbotAcceptsRequest();
+        clearsPendingRequestAfterKitbotTeleportTimeout();
         doesNotRequestKitbotTwiceInOneReplenishCycle();
         clearsPendingKitbotWhenLocalSupplyRecovers();
     }
@@ -95,7 +97,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         boolean[] managedSupplyActive = {true};
         PlaneKitbotRefillWorkflow requestWorkflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "KitBot", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "KitBot", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -162,7 +164,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -184,7 +186,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(2, false);
         PlaneKitbotDeliveryTracker delivery = new PlaneKitbotDeliveryTracker(supply, PlaneKitbotDroppedSupplyTrackers.none());
         PlaneKitbotMessenger messenger = new PlaneKitbotMessenger(
-            () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+            () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
             sent::add,
             () -> true
         );
@@ -209,7 +211,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(2, 1);
         PlaneKitbotDeliveryTracker delivery = new PlaneKitbotDeliveryTracker(supply, PlaneKitbotDroppedSupplyTrackers.none());
         PlaneKitbotMessenger messenger = new PlaneKitbotMessenger(
-            () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+            () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
             sent::add,
             () -> true
         );
@@ -243,7 +245,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableDroppedSupplyTracker drops = new PlaneKitbotRefillTestSupport.MutableDroppedSupplyTracker("stale-drop");
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -267,7 +269,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableDroppedSupplyTracker drops = new PlaneKitbotRefillTestSupport.MutableDroppedSupplyTracker(null);
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -292,7 +294,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -304,20 +306,73 @@ final class PlaneKitbotRefillSupplyPureTest {
 
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "request starts pending wait");
         assertEquals(1, sent.size(), "initial request sends once");
-        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 39, "pending wait before first proactive tpy");
-        assertEquals(1, sent.size(), "pending request does not send proactive tpy before delay");
-        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.waitForDelivery(), "first proactive tpy tick");
-        assertEquals(2, sent.size(), "pending request sends first proactive tpy after delay");
-        assertEquals("/tpy whoahbuddy", sent.get(1), "initial proactive tpy sends once");
-        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 99, "pending wait before proactive retry");
-        assertEquals(2, sent.size(), "pending request throttles proactive tpy retry");
-        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.waitForDelivery(), "proactive retry tick");
-        assertEquals(3, sent.size(), "pending request retries proactive tpy at throttle interval");
-        assertEquals("/tpy whoahbuddy", sent.get(2), "proactive retry uses configured accept command");
-        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 1061, "pending wait before kit request retry");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 160, "pending wait without teleport prompt");
+        assertEquals(1, sent.size(), "pending request does not send tpy before a prompt");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 1041, "pending wait before kit request retry");
         assertEquals(sent.get(0), sent.get(sent.size() - 1), "long pending wait retries the original refill command");
-        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 40, "pending wait before post-request proactive retry");
-        assertEquals("/tpy whoahbuddy", sent.get(sent.size() - 1), "kit request retry re-arms proactive tpy delay");
+        assertEquals(2, sent.size(), "long pending wait only retries the refill request");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 160, "post-retry wait without teleport prompt");
+        assertEquals(2, sent.size(), "kit request retry does not arm tpy");
+    }
+
+    private static void suppressesRetryAfterKitbotAcceptsRequest() {
+        List<String> sent = new ArrayList<>();
+        PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
+        PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
+            new PlaneKitbotMessenger(
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
+                sent::add,
+                () -> true
+            ),
+            null,
+            supply,
+            (PlaneKitbotDroppedSupplyTracker) null,
+            null
+        );
+
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "request starts pending wait");
+        assertEquals(1, sent.size(), "initial request sends once");
+        workflow.handleTeleportPrompt("whoahbuddy whispers: Accepted 'echest' x1. Gathering now.");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 1_400, "accepted request wait before prompt");
+        assertEquals(2, sent.size(), "accepted kitbot request sends one legacy tpy probe but no duplicate refill request");
+        assertEquals("/tpy whoahbuddy", sent.get(1), "legacy tpy probe is sent once");
+
+        workflow.handleTeleportPrompt("whoahbuddy whispers: You already have a kit request in progress: 'echest' x1.");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 1_400, "in-progress request wait before prompt");
+        assertEquals(2, sent.size(), "in-progress kitbot request is not retried");
+    }
+
+    private static void clearsPendingRequestAfterKitbotTeleportTimeout() {
+        List<String> sent = new ArrayList<>();
+        PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
+        PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
+            new PlaneKitbotMessenger(
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
+                sent::add,
+                () -> true
+            ),
+            null,
+            supply,
+            (PlaneKitbotDroppedSupplyTracker) null,
+            null
+        );
+
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "request starts pending wait");
+        workflow.handleTeleportPrompt("whoahbuddy whispers: Accepted 'echest' x1. Gathering now.");
+        assertTrue(workflow.pending(), "accepted request stays pending");
+        workflow.handleTeleportPrompt("whoahbuddy whispers: Delivery timed out waiting for /tpy. Returning to stash position.");
+        assertFalse(workflow.pending(), "timeout clears the pending delivery");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "timeout waits in refill cooldown");
+        assertEquals(1, sent.size(), "timeout does not immediately send a fresh request");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 1_199, "timeout retry cooldown");
+        assertEquals(1, sent.size(), "cooldown suppresses duplicate refill request");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.waitForDelivery(), "cooldown expiry sends a fresh request");
+        assertEquals(2, sent.size(), "fresh request is sent after cooldown");
+
+        workflow.handleTeleportPrompt("whoahbuddy whispers: Delivery cancelled before teleport. I returned to the stash position with the kits.");
+        assertFalse(workflow.pending(), "cancelled delivery clears the second pending request");
+        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "cancelled delivery waits in refill cooldown");
+        assertEquals(2, sent.size(), "cancelled delivery does not immediately send another request");
     }
 
     private static void doesNotRequestKitbotTwiceInOneReplenishCycle() {
@@ -325,7 +380,7 @@ final class PlaneKitbotRefillSupplyPureTest {
         PlaneKitbotRefillTestSupport.MutableSupplyProbe supply = new PlaneKitbotRefillTestSupport.MutableSupplyProbe(0, false);
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),

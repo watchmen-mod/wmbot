@@ -26,6 +26,8 @@ final class PlaneReplenishCleanupPureTest {
         plansTrashFallWaitDecisions();
         timesOutPersistentTrashDropWait();
         tracksTrashCleanupCycleExhaustion();
+        tracksTrashEdgeMovementWatchdog();
+        tracksTrashEdgeMovementTimeoutCycleExhaustion();
         ignoresUnsafePickupTargets();
     }
 
@@ -416,5 +418,34 @@ final class PlaneReplenishCleanupPureTest {
         assertFalse(cycle.canStartTrashEdgeCleanup(), "timed-out cleanup cycle blocks immediate trash edge restart");
         cycle.begin();
         assertTrue(cycle.canStartTrashEdgeCleanup(), "new cleanup cycle clears trash edge exhaustion");
+    }
+
+    private static void tracksTrashEdgeMovementWatchdog() {
+        PlaneTrashEdgeMovementWatchdog watchdog = new PlaneTrashEdgeMovementWatchdog(2);
+
+        assertFalse(watchdog.tickTimedOut(), "trash edge movement starts before timeout");
+        assertEquals(1, watchdog.targetTicks(), "first movement tick is counted");
+        assertFalse(watchdog.tickTimedOut(), "trash edge movement continues through max target ticks");
+        assertEquals(2, watchdog.targetTicks(), "second movement tick is counted");
+        assertTrue(watchdog.tickTimedOut(), "trash edge movement times out after max target ticks");
+        assertEquals(0, watchdog.targetTicks(), "timeout clears trash edge movement ticks");
+
+        assertFalse(watchdog.tickTimedOut(), "trash edge movement can start again after timeout reset");
+        watchdog.reset();
+        assertEquals(0, watchdog.targetTicks(), "manual reset clears trash edge movement ticks");
+    }
+
+    private static void tracksTrashEdgeMovementTimeoutCycleExhaustion() {
+        PlaneTrashCleanupCycle cycle = new PlaneTrashCleanupCycle();
+        PlaneTrashEdgeMovementWatchdog watchdog = new PlaneTrashEdgeMovementWatchdog(1);
+
+        assertFalse(watchdog.tickTimedOut(), "trash edge movement continues before timeout fallback");
+        if (watchdog.tickTimedOut()) cycle.markExhausted();
+        assertFalse(cycle.canStartTrashEdgeCleanup(), "trash edge movement timeout exhausts current cleanup cycle");
+
+        cycle.begin();
+        watchdog.reset();
+        assertTrue(cycle.canStartTrashEdgeCleanup(), "new cleanup cycle permits trash edge movement after timeout");
+        assertFalse(watchdog.tickTimedOut(), "new cleanup cycle starts with a fresh movement counter");
     }
 }

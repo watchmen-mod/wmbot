@@ -16,6 +16,7 @@ final class PlaneTrashEdgeWorkflow {
     private final PlaneDroppedItemScanner droppedTrashScanner;
     private final PlaneTrashDropWait dropWait = new PlaneTrashDropWait();
     private final PlaneTrashCleanupCycle cleanupCycle = new PlaneTrashCleanupCycle();
+    private final PlaneTrashEdgeMovementWatchdog movementWatchdog = new PlaneTrashEdgeMovementWatchdog();
 
     private PlaneTrashEdgePlanner.Target target;
 
@@ -86,6 +87,7 @@ final class PlaneTrashEdgeWorkflow {
 
     void reset() {
         target = null;
+        movementWatchdog.reset();
         dropWait.reset();
         navigator.stop();
     }
@@ -113,6 +115,7 @@ final class PlaneTrashEdgeWorkflow {
 
         if (target == null) {
             target = planner.select(context.player().getBlockPos());
+            movementWatchdog.reset();
             if (target == null) {
                 reset();
                 return Phase.IDLE;
@@ -121,7 +124,15 @@ final class PlaneTrashEdgeWorkflow {
 
         if (arrivedAtTarget()) {
             navigator.stop();
+            movementWatchdog.reset();
             return Phase.DROPPING_TRASH_OFF_EDGE;
+        }
+
+        if (movementWatchdog.tickTimedOut()) {
+            target = null;
+            cleanupCycle.markExhausted();
+            navigator.stop();
+            return Phase.IDLE;
         }
 
         navigator.walkTo(Vec3d.ofCenter(target.standing()));

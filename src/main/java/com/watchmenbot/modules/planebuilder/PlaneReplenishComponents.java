@@ -106,7 +106,7 @@ record PlaneReplenishComponents(
         PlaneWorldAccess world = new PlaneWorldAccess(context);
         EnderChestSupplyInventory supply = new EnderChestSupplyInventory(inventory);
         ServiceHoleContext serviceHole = new ServiceHoleContext(scanner, config, context);
-        ServiceHoleWorkflow serviceHoles = new ServiceHoleWorkflow(serviceHole, inventory, guards, actions);
+        ServiceHoleWorkflow serviceHoles = new ServiceHoleWorkflow(serviceHole, inventory, guards, actions, logger);
         EnderChestFarmProgress farmProgress = new EnderChestFarmProgress();
         ManagedEnderChestShulkerState managedShulker = new ManagedEnderChestShulkerState();
         PlaneReplenishDropDetector dropDetector = new PlaneReplenishDropDetector();

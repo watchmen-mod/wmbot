@@ -314,11 +314,11 @@ final class PlaneInventoryView {
     }
 
     boolean isUsableBowStack(ItemStack stack) {
-        return PlaneItemClassifier.isUsableBowStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
+        return PlaneItemClassifier.isUsableBowStack(stack, PlaneBuilderSettings.WEAPON_DURABILITY_THRESHOLD_PERCENT);
     }
 
     boolean isUsableSwordStack(ItemStack stack) {
-        return PlaneItemClassifier.isUsableSwordStack(stack, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT);
+        return PlaneItemClassifier.isUsableSwordStack(stack, PlaneBuilderSettings.WEAPON_DURABILITY_THRESHOLD_PERCENT);
     }
 
     int countEnderChestsInShulker(ItemStack stack) {

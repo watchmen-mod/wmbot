@@ -30,7 +30,7 @@ final class PlaneCoordinatorOwnerWorkflow {
     }
 
     void tickReplenishOwner() {
-        autoWalk.reset();
+        autoWalk.suspend();
         autoWalk.lockAutoElytra(PlaneAutoWalkController.LockoutReason.REPLENISH);
         holeEscape.reset();
         endermanLookSafety.lookDownIfUnsafe();

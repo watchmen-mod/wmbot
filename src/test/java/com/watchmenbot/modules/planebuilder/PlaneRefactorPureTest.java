@@ -62,12 +62,19 @@ final class PlaneRefactorPureTest {
         assertEquals(319, config.buildY(), "runtime config exposes plane height");
         assertEquals(4, config.scanRadius(), "runtime config exposes scan radius");
         assertEquals(32, config.replenishMinBuildBlocks(), "runtime config exposes replenish threshold");
+        assertEquals(24.0, PlaneBuilderSettings.BOW_DEFENSE_RANGE, "bow defense range is hardcoded to 24 blocks");
+        assertEquals(35, PlaneBuilderSettings.BOW_DEFENSE_CHARGE_TICKS, "bow defense charge is hardcoded to 35 ticks");
+        assertEquals(2, PlaneBuilderSettings.AUTO_WALK_WAYPOINT_RADIUS, "auto-walk waypoint radius is hardcoded to 2 blocks");
+        assertEquals(10, PlaneBuilderSettings.AUTO_ELYTRA_SOLID_LOOKAHEAD, "auto-elytra solid lookahead is hardcoded to 10 blocks");
+        assertEquals(5, PlaneBuilderSettings.PICKAXE_DURABILITY_THRESHOLD_PERCENT, "pickaxe durability threshold defaults to 5 percent");
+        assertEquals(24.0, PlaneBuilderSettings.ENDERMAN_LOOK_RADIUS, "enderman look radius defaults to 24 blocks");
+        assertEquals(75, PlaneBuilderSettings.SAFE_IDLE_LOOK_PITCH, "enderman idle pitch is hardcoded to 75 degrees");
     }
 
     private static void controlsAutoWalkWithoutMinecraftRuntime() {
         RecordingNavigator navigator = new RecordingNavigator();
         PlaneAutoWalkController disabled = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(false, 2),
+            new FixedAutoWalkConfig(false),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 8, 0, 8), 1, 2),
             navigator
         );
@@ -77,7 +84,7 @@ final class PlaneRefactorPureTest {
 
         RecordingNavigator walkingNavigator = new RecordingNavigator();
         PlaneAutoWalkController walking = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1),
+            new FixedAutoWalkConfig(true),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 8, 0, 8), 1, 2),
             walkingNavigator
         );
@@ -85,9 +92,53 @@ final class PlaneRefactorPureTest {
         assertEquals(Phase.AUTO_WALKING, walking.tick(new BlockPos(4, 0, 4)), "enabled auto-walk starts walking");
         assertTrue(walkingNavigator.target != null, "enabled auto-walk emits a local target");
 
+        RecordingNavigator longLaneNavigator = new RecordingNavigator();
+        PlaneAutoWalkController longLaneWalk = new PlaneAutoWalkController(
+            new FixedAutoWalkConfig(true),
+            new PlaneAutoWalkPlanner(),
+            longLaneNavigator
+        );
+        assertEquals(Phase.AUTO_WALKING, longLaneWalk.tick(new BlockPos(3000, 319, -9996)), "mid-lane auto-walk keeps moving");
+        assertEquals(
+            new PlaneAutoWalkPlanner.Segment(
+                new PlaneAutoWalkPlanner.Waypoint(-9996, -9996),
+                new PlaneAutoWalkPlanner.Waypoint(9996, -9996),
+                PlaneAutoWalkPlanner.SegmentAxis.X
+            ),
+            longLaneWalk.activeSegment(),
+            "mid-lane route state still owns the first lane endpoint"
+        );
+        longLaneWalk.suspend();
+        assertEquals(Phase.AUTO_WALKING, longLaneWalk.tick(new BlockPos(3000, 319, -9988)), "suspended route resumes even after nearby lane drift");
+        assertEquals(
+            new PlaneAutoWalkPlanner.Segment(
+                new PlaneAutoWalkPlanner.Waypoint(-9996, -9996),
+                new PlaneAutoWalkPlanner.Waypoint(9996, -9996),
+                PlaneAutoWalkPlanner.SegmentAxis.X
+            ),
+            longLaneWalk.activeSegment(),
+            "suspend preserves the active long lane instead of reselecting the neighboring lane"
+        );
+        assertEquals(
+            new PlaneAutoWalkPlanner.Waypoint(3000, -9996),
+            longLaneNavigator.target,
+            "resumed route corrects sideways drift back to the active lane line"
+        );
+        longLaneWalk.reset();
+        assertEquals(Phase.AUTO_WALKING, longLaneWalk.tick(new BlockPos(3000, 319, -9988)), "hard reset reinitializes from current position");
+        assertEquals(
+            new PlaneAutoWalkPlanner.Segment(
+                new PlaneAutoWalkPlanner.Waypoint(9996, -9988),
+                new PlaneAutoWalkPlanner.Waypoint(-9996, -9988),
+                PlaneAutoWalkPlanner.SegmentAxis.X
+            ),
+            longLaneWalk.activeSegment(),
+            "hard reset can reselect the nearest lane when route memory is intentionally cleared"
+        );
+
         RecordingNavigator reachedNavigator = new RecordingNavigator();
         PlaneAutoWalkController reached = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 16),
+            new FixedAutoWalkConfig(true),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 0, 0, 0), 1, 1),
             reachedNavigator
         );
@@ -96,7 +147,7 @@ final class PlaneRefactorPureTest {
         assertTrue(reachedNavigator.stopped, "reached final waypoint stops movement");
 
         FixedAutoElytraWorld elytraWorld = new FixedAutoElytraWorld();
-        for (int x = 5; x <= 25; x++) {
+        for (int x = 5; x <= 15; x++) {
             elytraWorld.block(new BlockPos(x, 319, 0));
         }
         PlaneAutoElytraScanner elytraScanner = new PlaneAutoElytraScanner(
@@ -105,13 +156,13 @@ final class PlaneRefactorPureTest {
         );
         RecordingNavigator elytraNavigator = new RecordingNavigator();
         PlaneAutoWalkController elytraWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 0), 1, 1),
             elytraNavigator,
             elytraScanner
         );
-        assertEquals(Phase.AUTO_ELYTRA_FLYING, elytraWalk.tick(new BlockPos(4, 320, 0)), "blocked route starts auto elytra flight");
+        assertEquals(Phase.AUTO_ELYTRA_FLYING, elytraWalk.tick(new BlockPos(4, 320, 0)), "route blocked beyond the hardcoded lookahead starts auto elytra flight");
         assertTrue(elytraNavigator.flying, "auto elytra flight uses the navigator fly path");
         assertEquals(new PlaneAutoWalkPlanner.Waypoint(5, 0), elytraNavigator.target, "auto elytra starts with a route target on the snake lane");
 
@@ -171,7 +222,7 @@ final class PlaneRefactorPureTest {
         );
         RecordingNavigator hazardOnlyNavigator = new RecordingNavigator();
         PlaneAutoWalkController hazardOnlyWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 0), 1, 1),
             hazardOnlyNavigator,
@@ -179,6 +230,9 @@ final class PlaneRefactorPureTest {
         );
         assertEquals(Phase.AUTO_ELYTRA_FLYING, hazardOnlyWalk.tick(new BlockPos(4, 320, 0)), "single route-ahead hazard starts auto elytra flight");
         assertTrue(hazardOnlyNavigator.flying, "single hazard uses the navigator fly path");
+        hazardOnlyWalk.reset();
+        assertTrue(hazardOnlyNavigator.stopped, "auto-walk reset stops active auto elytra flight");
+        assertFalse(hazardOnlyNavigator.flying, "auto-walk reset clears navigator flight state");
 
         FixedAutoElytraWorld rerouteWorld = new FixedAutoElytraWorld();
         rerouteWorld.solid.add(new BlockPos(18, 319, 1));
@@ -189,7 +243,7 @@ final class PlaneRefactorPureTest {
         RecordingNavigator rerouteNavigator = new RecordingNavigator();
         rerouteNavigator.flying = true;
         PlaneAutoWalkController rerouteWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 8, 1, 8, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 8), 1, 8),
             rerouteNavigator,
@@ -212,7 +266,7 @@ final class PlaneRefactorPureTest {
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             failedElytraWorld
         );
-        MutableAutoWalkConfig failedElytraConfig = new MutableAutoWalkConfig(true, 1, true, 20);
+        MutableAutoWalkConfig failedElytraConfig = new MutableAutoWalkConfig(true, true);
         RecordingNavigator failedElytraNavigator = new RecordingNavigator();
         failedElytraNavigator.flySucceeds = false;
         PlaneAutoWalkController failedElytraWalk = new PlaneAutoWalkController(
@@ -236,7 +290,7 @@ final class PlaneRefactorPureTest {
         );
         RecordingNavigator hazardCooldownNavigator = new RecordingNavigator();
         PlaneAutoWalkController hazardCooldownWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 0), 1, 1),
             hazardCooldownNavigator,
@@ -260,7 +314,7 @@ final class PlaneRefactorPureTest {
 
         RecordingNavigator lockedNavigator = new RecordingNavigator();
         PlaneAutoWalkController lockedWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 0), 1, 1),
             lockedNavigator,
@@ -278,7 +332,7 @@ final class PlaneRefactorPureTest {
 
         RecordingNavigator missionNavigator = new RecordingNavigator();
         PlaneAutoWalkController missionLanding = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1, true, 20),
+            new FixedAutoWalkConfig(true, true),
             new PlaneRuntimeConfig(new PlaneBuildConfig(319, 0, 40, 0, 0, 1, 1, 50, 32, 128), null),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 40, 0, 0), 1, 1),
             missionNavigator,
@@ -296,7 +350,7 @@ final class PlaneRefactorPureTest {
 
         RecordingNavigator nudgeNavigator = new RecordingNavigator();
         PlaneAutoWalkController nudgingWalk = new PlaneAutoWalkController(
-            new FixedAutoWalkConfig(true, 1),
+            new FixedAutoWalkConfig(true),
             new PlaneAutoWalkPlanner(new PlaneAreaBounds(0, 8, 0, 8), 1, 2),
             nudgeNavigator
         );
@@ -696,36 +750,25 @@ final class PlaneRefactorPureTest {
 
     private record FixedAutoWalkConfig(
         boolean enabled,
-        int waypointRadius,
-        boolean autoElytraFlyEnabled,
-        int autoElytraSolidLookahead
+        boolean autoElytraFlyEnabled
     ) implements PlaneAutoWalkController.AutoWalkConfig {
-        private FixedAutoWalkConfig(boolean enabled, int waypointRadius) {
-            this(enabled, waypointRadius, false, 20);
+        private FixedAutoWalkConfig(boolean enabled) {
+            this(enabled, false);
         }
     }
 
     private static final class MutableAutoWalkConfig implements PlaneAutoWalkController.AutoWalkConfig {
         private final boolean enabled;
-        private final int waypointRadius;
-        private final int autoElytraSolidLookahead;
         private boolean autoElytraFlyEnabled;
 
-        private MutableAutoWalkConfig(boolean enabled, int waypointRadius, boolean autoElytraFlyEnabled, int autoElytraSolidLookahead) {
+        private MutableAutoWalkConfig(boolean enabled, boolean autoElytraFlyEnabled) {
             this.enabled = enabled;
-            this.waypointRadius = waypointRadius;
             this.autoElytraFlyEnabled = autoElytraFlyEnabled;
-            this.autoElytraSolidLookahead = autoElytraSolidLookahead;
         }
 
         @Override
         public boolean enabled() {
             return enabled;
-        }
-
-        @Override
-        public int waypointRadius() {
-            return waypointRadius;
         }
 
         @Override
@@ -736,11 +779,6 @@ final class PlaneRefactorPureTest {
         @Override
         public void disableAutoElytraFly() {
             autoElytraFlyEnabled = false;
-        }
-
-        @Override
-        public int autoElytraSolidLookahead() {
-            return autoElytraSolidLookahead;
         }
     }
 

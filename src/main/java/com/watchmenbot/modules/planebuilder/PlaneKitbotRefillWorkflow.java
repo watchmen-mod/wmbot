@@ -142,7 +142,21 @@ final class PlaneKitbotRefillWorkflow {
     }
 
     PlaneKitbotTeleportAcceptWorkflow.AcceptResult handleTeleportPrompt(String message) {
-        return teleportAccept.handlePrompt(message);
+        PlaneKitbotRefillDecisions.KitbotDeliveryMessage deliveryMessage = messenger.kitbotDeliveryMessage(message);
+        delivery.handleKitbotDeliveryMessage(deliveryMessage);
+        if (deliveryMessage == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.TPA_REQUESTED) {
+            return teleportAccept.queueConfiguredAcceptFromKitbotTpa();
+        }
+        if (deliveryMessage == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.ACTIVE) {
+            teleportAccept.armLegacyFallbackAfterActiveRequest();
+        }
+        if (deliveryMessage == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.FAILED) {
+            return teleportAccept.clearAfterDeliveryFailure();
+        }
+        if (deliveryMessage == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.DELIVERED) {
+            return teleportAccept.clearAfterDeliveryFinished();
+        }
+        return teleportAccept.handleMessage(message);
     }
 
     void tickQueuedTeleportAccept() {

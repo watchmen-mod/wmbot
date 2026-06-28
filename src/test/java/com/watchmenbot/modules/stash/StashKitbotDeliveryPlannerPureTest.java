@@ -321,6 +321,31 @@ final class StashKitbotDeliveryPlannerPureTest {
             StashKitbotDeliveryPlanner.tpaTimeoutShouldReturn(true, true),
             "detected teleport does not return on timeout branch"
         );
+        assertEquals(
+            StashKitbotDeliveryPlanner.TpaRetryDecision.WAIT,
+            StashKitbotDeliveryPlanner.tpaRetryDecision(true, false, false, 1, 4),
+            "detected teleport suppresses tpa retry"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.TpaRetryDecision.WAIT,
+            StashKitbotDeliveryPlanner.tpaRetryDecision(false, true, false, 1, 4),
+            "pending cooldown suppresses tpa retry"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.TpaRetryDecision.WAIT,
+            StashKitbotDeliveryPlanner.tpaRetryDecision(false, false, true, 1, 4),
+            "active retry delay waits before resending tpa"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.TpaRetryDecision.RESEND_TPA,
+            StashKitbotDeliveryPlanner.tpaRetryDecision(false, false, false, 1, 4),
+            "uncooldowned wait can resend tpa before cap"
+        );
+        assertEquals(
+            StashKitbotDeliveryPlanner.TpaRetryDecision.FAIL_HOME,
+            StashKitbotDeliveryPlanner.tpaRetryDecision(false, false, false, 4, 4),
+            "tpa retry cap fails home cleanly"
+        );
         assertFalse(
             StashKitbotDeliveryPlanner.tpaCooldownShouldApply(true, true),
             "late tpa cooldown after detected teleport is stale"

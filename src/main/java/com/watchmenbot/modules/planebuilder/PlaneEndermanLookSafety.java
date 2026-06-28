@@ -21,10 +21,6 @@ final class PlaneEndermanLookSafety {
             return PlaneBuilderSettings.ENDERMAN_LOOK_RADIUS;
         }
 
-        @Override
-        public int safeIdleLookPitch() {
-            return PlaneBuilderSettings.SAFE_IDLE_LOOK_PITCH;
-        }
     };
 
     private final Config config;
@@ -62,7 +58,7 @@ final class PlaneEndermanLookSafety {
             context.player().getEyePos(),
             yaw,
             desiredPitch,
-            config.safeIdleLookPitch(),
+            PlaneBuilderSettings.SAFE_IDLE_LOOK_PITCH,
             config.endermanLookRadius(),
             visibleEndermanLookPoints()
         );
@@ -85,7 +81,7 @@ final class PlaneEndermanLookSafety {
     void lookDown() {
         if (!context.worldReady()) return;
 
-        context.player().setPitch(PlaneEndermanLookMath.clampIdlePitch(config.safeIdleLookPitch()));
+        context.player().setPitch(PlaneEndermanLookMath.clampIdlePitch(PlaneBuilderSettings.SAFE_IDLE_LOOK_PITCH));
     }
 
     void lookDownIfUnsafe() {
@@ -117,6 +113,5 @@ final class PlaneEndermanLookSafety {
 
         double endermanLookRadius();
 
-        int safeIdleLookPitch();
     }
 }

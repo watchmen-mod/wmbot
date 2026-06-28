@@ -15,22 +15,27 @@ final class PlaneCoordinatorTickPolicyPureTest {
     private static void selectsCoordinatorTickOwners() {
         assertEquals(
             PlaneCoordinatorTickPolicy.TickOwner.REPLENISH,
-            PlaneCoordinatorTickPolicy.owner(true, true, true),
+            PlaneCoordinatorTickPolicy.owner(true, true, true, true),
             "replenish owns tick before bow defense"
         );
         assertEquals(
+            PlaneCoordinatorTickPolicy.TickOwner.MELEE_DEFENSE,
+            PlaneCoordinatorTickPolicy.owner(false, true, true, true),
+            "close melee defense owns tick before bow defense and build"
+        );
+        assertEquals(
             PlaneCoordinatorTickPolicy.TickOwner.BOW_DEFENSE,
-            PlaneCoordinatorTickPolicy.owner(false, true, false),
+            PlaneCoordinatorTickPolicy.owner(false, false, true, false),
             "active bow defense owns tick before guard pause"
         );
         assertEquals(
             PlaneCoordinatorTickPolicy.TickOwner.GUARD_PAUSED,
-            PlaneCoordinatorTickPolicy.owner(false, false, false),
+            PlaneCoordinatorTickPolicy.owner(false, false, false, false),
             "guards pause world actions when no subsystem owns tick"
         );
         assertEquals(
             PlaneCoordinatorTickPolicy.TickOwner.BUILD_LOOP,
-            PlaneCoordinatorTickPolicy.owner(false, false, true),
+            PlaneCoordinatorTickPolicy.owner(false, false, false, true),
             "build loop owns normal ready tick"
         );
         assertTrue(
@@ -167,6 +172,10 @@ final class PlaneCoordinatorTickPolicyPureTest {
         assertTrue(
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.SERVICE_HOLE_BLOCKED),
             "blocked service-hole recovery allows hole escape before retrying replenish"
+        );
+        assertTrue(
+            PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.BREAKING_ENDER_CHEST_SHULKER),
+            "shulker breaking allows hole escape before retrying replenish"
         );
         assertFalse(
             PlaneCoordinatorTickPolicy.shouldCheckHoleEscapeDuringReplenish(Phase.PLACING_ENDER_CHEST),

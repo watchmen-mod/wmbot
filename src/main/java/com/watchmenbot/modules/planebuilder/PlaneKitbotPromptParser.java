@@ -11,11 +11,15 @@ final class PlaneKitbotPromptParser {
         Pattern.CASE_INSENSITIVE
     );
     private static final Pattern DIRECT_REQUEST = Pattern.compile(
-        "\\b" + PLAYER_NAME + "\\s+(?:wants to teleport to you|has requested to teleport(?: to you)?|requested to teleport(?: to you)?|sent you a /tpa request)\\b",
+        "\\b" + PLAYER_NAME + "\\s+(?:wants to teleport(?: to you)?|has requested to teleport(?: to you)?|requested to teleport(?: to you)?|requests to teleport(?: to you)?|is requesting to teleport(?: to you)?|sent you a /?tpa request|has sent you a /?tpa request|sent you a teleport request|has sent you a teleport request|sent a teleport request to you)\\b",
         Pattern.CASE_INSENSITIVE
     );
     private static final Pattern REQUEST_FROM = Pattern.compile(
-        "\\b(?:teleport|tpa) request from\\s+" + PLAYER_NAME + "\\b",
+        "\\b(?:teleport|tpa) request from:?\\s+" + PLAYER_NAME + "\\b",
+        Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern REQUEST_BY = Pattern.compile(
+        "\\b(?:teleport|tpa) request (?:sent )?by:?\\s+" + PLAYER_NAME + "\\b",
         Pattern.CASE_INSENSITIVE
     );
 
@@ -30,11 +34,23 @@ final class PlaneKitbotPromptParser {
         String lowerNickname = cleanNickname.toLowerCase(Locale.ROOT);
         if (!lower.contains(lowerNickname)) return false;
 
-        return lower.contains(lowerNickname + " wants to teleport to you")
+        String requester = teleportPromptRequester(message);
+        if (requester != null) return requester.equalsIgnoreCase(cleanNickname);
+
+        return lower.contains(lowerNickname + " wants to teleport")
             || lower.contains(lowerNickname + " has requested to teleport")
             || lower.contains(lowerNickname + " requested to teleport")
+            || lower.contains(lowerNickname + " requests to teleport")
+            || lower.contains(lowerNickname + " is requesting to teleport")
             || lower.contains("teleport request from " + lowerNickname)
+            || lower.contains("teleport request from: " + lowerNickname)
+            || lower.contains("tpa request from " + lowerNickname)
+            || lower.contains("tpa request from: " + lowerNickname)
+            || lower.contains("teleport request by " + lowerNickname)
+            || lower.contains("tpa request by " + lowerNickname)
             || lower.contains(lowerNickname + " sent you a /tpa request")
+            || lower.contains(lowerNickname + " sent you a tpa request")
+            || lower.contains(lowerNickname + " sent you a teleport request")
             || (lower.contains("type /tpy " + lowerNickname) && lower.contains(" to accept"))
             || (lower.contains("type /tpaccept " + lowerNickname) && lower.contains(" to accept"))
             || (lower.contains("/tpa") && lower.contains("accept"));
@@ -49,7 +65,10 @@ final class PlaneKitbotPromptParser {
         requester = find(DIRECT_REQUEST, message);
         if (requester != null) return requester;
 
-        return find(REQUEST_FROM, message);
+        requester = find(REQUEST_FROM, message);
+        if (requester != null) return requester;
+
+        return find(REQUEST_BY, message);
     }
 
     private static String find(Pattern pattern, String message) {

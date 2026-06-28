@@ -80,6 +80,11 @@ public class StashKitbot extends Module {
         }
 
         @Override
+        public void queueReply(String player, String message) {
+            StashKitbot.this.queueReply(player, message);
+        }
+
+        @Override
         public void failRequest(String message) {
             lifecycleWorkflow.failRequest(message);
         }

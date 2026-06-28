@@ -1,6 +1,8 @@
 package com.watchmenbot.modules.planebuilder;
 
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
+import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
+import net.minecraft.entity.SpawnGroup;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
@@ -22,6 +24,8 @@ final class PlaneBowDefensePureTest {
         selectsCenterMassAimPoint();
         leadsMovingBowTargets();
         rejectsImpossibleBowAim();
+        appliesCloseThreatTargetPolicies();
+        pinsKillAuraToSwords();
         keepsBowDefenseAvailableDuringReplenishPhases();
         startsShotSessionWithoutBowAimbot();
         restoresShotSession();
@@ -127,10 +131,12 @@ final class PlaneBowDefensePureTest {
         assertFalse(PlaneBowFiringPolicy.drawStarted(true, 0), "draw is not confirmed before use ticks advance");
         assertTrue(PlaneBowFiringPolicy.drawStarted(true, 1), "draw is confirmed from real use ticks");
         assertTrue(PlaneBowFiringPolicy.drawStartTimedOut(PlaneBowFiringPolicy.DRAW_START_TIMEOUT_TICKS), "draw start timeout trips at the configured limit");
-        assertFalse(PlaneBowFiringPolicy.enoughDraw(29), "reliable draw does not release before 30 real use ticks");
-        assertTrue(PlaneBowFiringPolicy.enoughDraw(30), "reliable draw uses 30 real use ticks");
+        assertFalse(PlaneBowFiringPolicy.enoughDraw(34), "reliable draw does not release before 35 real use ticks");
+        assertTrue(PlaneBowFiringPolicy.enoughDraw(35), "reliable draw uses 35 real use ticks");
         assertTrue(PlaneBowFiringPolicy.drawStalled(false, 10, 9, 0), "draw stalls when item use stops");
         assertTrue(PlaneBowFiringPolicy.drawStalled(true, 10, 10, PlaneBowFiringPolicy.DRAW_STALL_TIMEOUT_TICKS), "draw stalls when use ticks stop advancing");
+        assertFalse(PlaneBowFiringPolicy.postReleaseCleanupComplete(PlaneBowFiringPolicy.POST_RELEASE_CLEANUP_TICKS - 1), "post-release cleanup waits before swapping back");
+        assertTrue(PlaneBowFiringPolicy.postReleaseCleanupComplete(PlaneBowFiringPolicy.POST_RELEASE_CLEANUP_TICKS), "post-release cleanup completes after the configured delay");
 
         PlaneBowAimController.Aim previous = new PlaneBowAimController.Aim(10.0, -5.0, Vec3d.ZERO);
         PlaneBowAimController.Aim stable = new PlaneBowAimController.Aim(11.0, -4.5, Vec3d.ZERO);
@@ -138,16 +144,16 @@ final class PlaneBowDefensePureTest {
         assertTrue(PlaneBowFiringPolicy.aimStable(previous, stable), "small aim changes count as settled");
         assertFalse(PlaneBowFiringPolicy.aimStable(previous, unstable), "large aim changes reset settle confidence");
         assertFalse(
-            PlaneBowFiringPolicy.shouldReleaseDirect(30, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS - 1, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
+            PlaneBowFiringPolicy.shouldReleaseDirect(35, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS - 1, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
             "direct release waits for rotation settle"
         );
         assertTrue(
-            PlaneBowFiringPolicy.shouldReleaseDirect(30, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
+            PlaneBowFiringPolicy.shouldReleaseDirect(35, PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS, PlaneBowFiringPolicy.REQUIRED_DIRECT_HIT_TICKS),
             "direct release requires draw, settle, and direct-hit confidence"
         );
         assertFalse(
             PlaneBowFiringPolicy.shouldReleaseFallback(
-                30,
+                35,
                 PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS,
                 PlaneBowFiringPolicy.REQUIRED_FALLBACK_AIM_TICKS,
                 PlaneBowFiringPolicy.MAX_FALLBACK_TARGET_SPEED_SQUARED + 0.01
@@ -156,7 +162,7 @@ final class PlaneBowDefensePureTest {
         );
         assertTrue(
             PlaneBowFiringPolicy.shouldReleaseFallback(
-                30,
+                35,
                 PlaneBowFiringPolicy.REQUIRED_AIM_SETTLE_TICKS,
                 PlaneBowFiringPolicy.REQUIRED_FALLBACK_AIM_TICKS,
                 0.0
@@ -200,6 +206,41 @@ final class PlaneBowDefensePureTest {
         );
 
         assertTrue(aim.isEmpty(), "impossible low-charge high-distance shot returns no bow aim");
+    }
+
+    private static void appliesCloseThreatTargetPolicies() {
+        assertTrue(
+            PlaneBowTargeting.bowTargetPolicy(4.6, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, false),
+            "visible hostile just outside melee handoff range is bow eligible without confirmed aggro"
+        );
+        assertFalse(
+            PlaneBowTargeting.bowTargetPolicy(4.5, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, true),
+            "hostile at melee handoff range is not bow eligible"
+        );
+        assertFalse(
+            PlaneBowTargeting.bowTargetPolicy(25.0, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, true),
+            "bow defense rejects threats outside the hardcoded range"
+        );
+        assertTrue(
+            PlaneBowTargeting.meleePrepPolicy(4.5, false),
+            "close hostile melee policy does not require confirmed aggro"
+        );
+        assertFalse(
+            KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.CREATURE),
+            "passive creature spawn groups remain excluded from hostile targeting"
+        );
+    }
+
+    private static void pinsKillAuraToSwords() {
+        assertTrue(
+            KillAuraCompanionSettings.sessionSettingNames().contains("weapon"),
+            "KillAura session snapshots include the weapon setting"
+        );
+        assertEquals(
+            KillAura.Weapon.Sword,
+            KillAuraCompanionSettings.sessionWeapon(),
+            "KillAura companion session pins attacks to swords"
+        );
     }
 
     private static void keepsBowDefenseAvailableDuringReplenishPhases() {

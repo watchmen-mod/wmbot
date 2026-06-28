@@ -5,7 +5,12 @@ final class PlaneCoordinatorTickPolicy {
     }
 
     static TickOwner owner(boolean replenishActive, boolean bowDefenseActive, boolean readyForWorldAction) {
+        return owner(replenishActive, false, bowDefenseActive, readyForWorldAction);
+    }
+
+    static TickOwner owner(boolean replenishActive, boolean meleeDefenseActive, boolean bowDefenseActive, boolean readyForWorldAction) {
         if (replenishActive) return TickOwner.REPLENISH;
+        if (meleeDefenseActive) return TickOwner.MELEE_DEFENSE;
         if (bowDefenseActive) return TickOwner.BOW_DEFENSE;
         if (!readyForWorldAction) return TickOwner.GUARD_PAUSED;
 
@@ -37,11 +42,13 @@ final class PlaneCoordinatorTickPolicy {
         return phase == Phase.SERVICE_HOLE_BLOCKED
             || phase == Phase.CLOSING_SERVICE_HOLE
             || phase == Phase.CLOSING_SERVICE_HOLE_FOR_KITBOT_REFILL
+            || phase == Phase.BREAKING_ENDER_CHEST_SHULKER
             || phase == Phase.MOVING_TO_TRASH_EDGE;
     }
 
     enum TickOwner {
         REPLENISH,
+        MELEE_DEFENSE,
         BOW_DEFENSE,
         GUARD_PAUSED,
         BUILD_LOOP
