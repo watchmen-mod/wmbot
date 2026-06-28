@@ -16,7 +16,6 @@ import net.minecraft.entity.mob.WitchEntity;
 
 final class PlaneBowTargeting {
     static final double MELEE_PREP_RANGE = 4.5;
-    static final double BOW_FALLBACK_MIN_RANGE = 6.0;
 
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -51,7 +50,6 @@ final class PlaneBowTargeting {
         if (!facts.visible()) return BowTargetStatus.NOT_VISIBLE;
         if (facts.distance() > range) return BowTargetStatus.OUT_OF_RANGE;
         if (facts.distance() <= MELEE_PREP_RANGE) return BowTargetStatus.MELEE_HANDOFF;
-        if (!facts.aggroedOnBot() && facts.distance() < BOW_FALLBACK_MIN_RANGE) return BowTargetStatus.WAITING_FOR_SPACING;
 
         return BowTargetStatus.READY;
     }
@@ -65,11 +63,11 @@ final class PlaneBowTargeting {
         if (!visible || distance > maxRange) return false;
         if (distance <= MELEE_PREP_RANGE) return false;
 
-        return aggroedOnBot || distance >= BOW_FALLBACK_MIN_RANGE;
+        return true;
     }
 
     static boolean meleePrepPolicy(double distance, boolean aggroedOnBot) {
-        return aggroedOnBot && distance <= MELEE_PREP_RANGE;
+        return distance <= MELEE_PREP_RANGE;
     }
 
     static int threatPriority(boolean witch, boolean skeleton, boolean creeper, boolean hostile) {
@@ -139,8 +137,7 @@ final class PlaneBowTargeting {
         INVALID("target lost"),
         NOT_VISIBLE("visibility lost"),
         OUT_OF_RANGE("target out of bow range"),
-        MELEE_HANDOFF("target entered melee handoff range"),
-        WAITING_FOR_SPACING("target is too close without bot aggro");
+        MELEE_HANDOFF("target entered melee handoff range");
 
         private final String logReason;
 

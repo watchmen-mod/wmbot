@@ -43,6 +43,7 @@ final class GatherState {
     int initialInventoryCount;
     int pendingTransferInventoryCount;
     int pendingTransferSlot = -1;
+    boolean gatherStartNotified;
     final Set<Integer> skippedSourceIndexes = new HashSet<>();
 }
 
@@ -58,6 +59,8 @@ final class DeliveryState {
     int directStepTicks;
     int positioningTicks;
     int deliveryTraceTicks;
+    int tpaAttemptCount;
+    int tpaRetryTicks;
     int stuckMovementTicks;
     int stuckRecoveryAttempts;
     boolean crossDimensionDelivery;

@@ -165,6 +165,8 @@ final class PlaneUtilityPureTest {
         assertEquals(new PlaneAutoWalkPlanner.Waypoint(9996, -9988), waypoints.get(2), "second lane starts from prior side");
         assertEquals(new PlaneAutoWalkPlanner.Waypoint(-9996, -9988), waypoints.get(3), "second lane crosses west");
         assertEquals(9996, waypoints.get(waypoints.size() - 1).z(), "last lane is inset from max edge");
+        assertEquals(PlaneBuilderSettings.MIN_X, waypoints.get(0).x() - PlaneBuilderSettings.SCAN_RADIUS, "inset first waypoint still covers configured minimum x edge");
+        assertEquals(PlaneBuilderSettings.MAX_X, waypoints.get(1).x() + PlaneBuilderSettings.SCAN_RADIUS, "inset first lane endpoint still covers configured maximum x edge");
 
         for (int i = 2; i < waypoints.size(); i += 2) {
             int previousLaneZ = waypoints.get(i - 2).z();
@@ -197,6 +199,18 @@ final class PlaneUtilityPureTest {
             ),
             firstLaneSegment,
             "segment metadata is derived from deterministic route waypoints"
+        );
+        assertFalse(
+            planner.endpointReached(firstLaneState, 3000, -9996, 2),
+            "mid-lane position does not count as reaching the far edge endpoint"
+        );
+        assertTrue(
+            planner.compatibleWithSegment(firstLaneState, 3000, -9988, PlaneBuilderSettings.SCAN_RADIUS * 3),
+            "side drift near a neighboring lane is still compatible with the active long lane"
+        );
+        assertFalse(
+            planner.compatibleWithSegment(firstLaneState, 3000, -9970, PlaneBuilderSettings.SCAN_RADIUS * 3),
+            "large off-lane movement is not compatible with the active long lane"
         );
 
         PlaneAutoWalkPlanner.AutoWalkState nextLaneState = planner.advance(new PlaneAutoWalkPlanner.AutoWalkState(1, 1));
@@ -660,11 +674,11 @@ final class PlaneUtilityPureTest {
         assertFalse(KillAuraCompanionSettings.isAggroedOnBot(false, null, botUuid), "bow defense rejects mobs with no bot aggro");
         assertTrue(PlaneBowTargeting.meleePrepPolicy(4.5, true), "melee prep runs for close aggroed threats");
         assertFalse(PlaneBowTargeting.meleePrepPolicy(4.6, true), "melee prep ignores threats outside KillAura range");
-        assertFalse(PlaneBowTargeting.meleePrepPolicy(4.0, false), "melee prep requires bot aggro");
+        assertTrue(PlaneBowTargeting.meleePrepPolicy(4.0, false), "melee prep handles close threats even before aggro is confirmed");
         assertFalse(PlaneBowTargeting.bowTargetPolicy(4.5, 20.0, true, true), "bow defense leaves melee-range threats to KillAura");
         assertTrue(PlaneBowTargeting.bowTargetPolicy(4.6, 20.0, true, true), "bow defense accepts aggroed threats outside melee range");
-        assertFalse(PlaneBowTargeting.bowTargetPolicy(5.9, 20.0, true, false), "bow fallback waits for spacing before missing-aggro targets");
-        assertTrue(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, true, false), "bow fallback accepts visible missing-aggro targets at spacing threshold");
+        assertTrue(PlaneBowTargeting.bowTargetPolicy(5.9, 20.0, true, false), "bow defense accepts visible threats outside melee range before aggro is confirmed");
+        assertTrue(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, true, false), "bow defense accepts visible missing-aggro targets at spacing threshold");
         assertFalse(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, false, true), "bow defense still requires visibility");
         assertFalse(PlaneBowTargeting.bowTargetPolicy(21.0, 20.0, true, true), "bow defense respects configured range");
     }

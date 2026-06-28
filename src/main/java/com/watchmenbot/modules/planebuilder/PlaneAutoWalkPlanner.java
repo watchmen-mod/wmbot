@@ -92,6 +92,29 @@ final class PlaneAutoWalkPlanner {
         return new RouteCorrection(target, offAxis, offAxis <= corridor);
     }
 
+    boolean compatibleWithSegment(AutoWalkState state, int x, int z, int corridorRadius) {
+        Segment segment = segment(state);
+        if (segment == null) return true;
+
+        int corridor = Math.max(0, corridorRadius);
+        if (segment.axis() == SegmentAxis.X) {
+            return within(x, segment.start().x(), segment.end().x(), corridor)
+                && Math.abs(z - segment.start().z()) <= corridor;
+        }
+
+        return within(z, segment.start().z(), segment.end().z(), corridor)
+            && Math.abs(x - segment.start().x()) <= corridor;
+    }
+
+    boolean endpointReached(AutoWalkState state, int x, int z, int radius) {
+        Waypoint waypoint = waypoint(state);
+        if (waypoint == null) return false;
+
+        long dx = (long) x - waypoint.x();
+        long dz = (long) z - waypoint.z();
+        return dx * dx + dz * dz <= (long) radius * radius;
+    }
+
     Segment segment(AutoWalkState state) {
         if (waypoints.isEmpty()) return null;
 
@@ -199,6 +222,12 @@ final class PlaneAutoWalkPlanner {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static boolean within(int value, int a, int b, int margin) {
+        int min = Math.min(a, b) - margin;
+        int max = Math.max(a, b) + margin;
+        return value >= min && value <= max;
     }
 
     private static Waypoint alignedXTarget(Segment segment, int x, int z, int step) {

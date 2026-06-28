@@ -136,6 +136,7 @@ final class PlaneBuilderCoordinator {
             holeEscape,
             buildLoop,
             replenish,
+            meleeDefense,
             bowDefense,
             endermanLookSafety,
             new PlaneCoordinatorSafetyWorkflow.Callbacks() {
@@ -211,12 +212,17 @@ final class PlaneBuilderCoordinator {
             return;
         }
 
+        boolean meleeDefenseActive = meleeDefense.tick();
+        if (meleeDefenseActive) {
+            bowDefense.reset();
+            owner = PlaneCoordinatorTickPolicy.owner(false, true, false, guards.readyForWorldAction());
+            if (safety.tickMeleeDefenseOwner(owner, playerPos)) return;
+        }
+
         if (safety.tickHoleEscapeOwner(playerPos)) return;
 
-        meleeDefense.tick();
-
         BowDefenseTickResult bowDefenseResult = bowDefense.tickResult(false);
-        owner = PlaneCoordinatorTickPolicy.owner(false, bowDefenseResult.active(), guards.readyForWorldAction());
+        owner = PlaneCoordinatorTickPolicy.owner(false, false, bowDefenseResult.active(), guards.readyForWorldAction());
         if (safety.tickBowDefenseOwner(owner, playerPos)) return;
         if (safety.tickGuardPausedOwner(owner, playerPos)) return;
 

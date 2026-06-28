@@ -102,7 +102,7 @@ final class StashKitbotAcceptanceWorkflow {
             callbacks.info("%s'%s' x%d from current inventory for %s. Queued acceptance whisper after TPA to avoid command cooldown.", prefix, kit.name(), command.count(), requester);
         }
         else {
-            callbacks.reply(requester, "%s'%s' x%d. Gathering now.".formatted(prefix, kit.name(), command.count()));
+            callbacks.reply(requester, "%s'%s' x%d. Preparing to gather.".formatted(prefix, kit.name(), command.count()));
         }
         callbacks.info("Accepted stash kit request from %s: %s x%d (%d already in inventory, %d to gather).", requester, kit.name(), command.count(), inventoryMatches, remainingToGather);
         return true;

@@ -43,7 +43,7 @@ final class PlaneKitbotRefillPureTest {
         );
         PlaneKitbotRefillWorkflow enabledWorkflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "KitBot", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "KitBot", "echest", 1),
                 message -> {
                 },
                 () -> true
@@ -57,7 +57,7 @@ final class PlaneKitbotRefillPureTest {
         );
         PlaneKitbotRefillWorkflow disabledWorkflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(false, "KitBot", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(false, "KitBot", "echest", 1),
                 message -> {
                 },
                 () -> true
@@ -120,9 +120,7 @@ final class PlaneKitbotRefillPureTest {
             true,
             " KitBot ",
             " echest ",
-            3,
-            " /w ",
-            " /tpy "
+            3
         );
         PlaneKitbotRefillWorkflow workflow = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(() -> config, sent::add, () -> true),
@@ -133,22 +131,19 @@ final class PlaneKitbotRefillPureTest {
         assertTrue(workflow.pending(), "request becomes pending");
         assertEquals(1, sent.size(), "request sends only the whisper immediately");
         assertEquals("/w KitBot echest 3", sent.get(0), "request command is trimmed and formatted");
-        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 39, "delayed proactive accept wait");
-        assertEquals(1, sent.size(), "proactive accept waits before sending");
-        assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.waitForDelivery(), "delayed proactive accept fires");
-        assertEquals(2, sent.size(), "delayed proactive accept sends once");
-        assertEquals("/tpy KitBot", sent.get(1), "proactive accept command is trimmed and formatted");
+        PlaneKitbotRefillTestSupport.waitForDeliveryTicks(workflow, 160, "prompt-only accept wait");
+        assertEquals(1, sent.size(), "waiting without a teleport prompt does not send tpy");
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "pending request keeps waiting");
-        assertEquals(2, sent.size(), "pending request does not repeat whisper or tpy");
+        assertEquals(1, sent.size(), "pending request does not repeat whisper or tpy");
 
         workflow.reset();
         assertFalse(workflow.pending(), "reset clears pending request");
         assertEquals(Phase.WAITING_FOR_KITBOT_REFILL, workflow.afterServiceHoleClosed(), "later wait can send again after reset");
-        assertEquals(3, sent.size(), "request may send again on a later wait");
+        assertEquals(2, sent.size(), "request may send again on a later wait");
 
         PlaneKitbotRefillWorkflow disabled = new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(false, "KitBot", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(false, "KitBot", "echest", 1),
                 sent::add,
                 () -> true
             ),
@@ -157,7 +152,7 @@ final class PlaneKitbotRefillPureTest {
         assertEquals(Phase.MISSING_ENDER_CHEST_SHULKER, disabled.afterServiceHoleClosed(), "disabled refill does not send");
         assertEquals(
             null,
-            PlaneKitbotRefillDecisions.requestCommand(new PlaneKitbotRefillConfig(true, "", "echest", 1, "/w", "/tpy")),
+            PlaneKitbotRefillDecisions.requestCommand(new PlaneKitbotRefillConfig(true, "", "echest", 1)),
             "blank nickname does not produce a whisper command"
         );
     }

@@ -38,14 +38,17 @@ final class PlaneElytraFlySession {
     }
 
     void stop() {
-        if (!applied || elytraFly == null) return;
+        if (!applied) return;
 
-        if (!wasActive && moduleAccess.active(elytraFly)) moduleAccess.toggle(elytraFly);
-        restoreSettings();
-        snapshots.clear();
-        elytraFly = null;
-        wasActive = false;
-        applied = false;
+        try {
+            if (elytraFly != null && !wasActive && moduleAccess.active(elytraFly)) moduleAccess.toggle(elytraFly);
+            restoreSettings();
+        } finally {
+            snapshots.clear();
+            elytraFly = null;
+            wasActive = false;
+            applied = false;
+        }
     }
 
     private void snapshotSettings() {

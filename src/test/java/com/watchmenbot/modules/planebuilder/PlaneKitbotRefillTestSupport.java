@@ -17,7 +17,7 @@ final class PlaneKitbotRefillTestSupport {
     static PlaneKitbotRefillWorkflow refillWorkflow(List<String> sent, MutableSupplyProbe supply, int requiredEnderChests) {
         return new PlaneKitbotRefillWorkflow(
             new PlaneKitbotMessenger(
-                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1, "/w", "/tpy"),
+                () -> new PlaneKitbotRefillConfig(true, "whoahbuddy", "echest", 1),
                 sent::add,
                 () -> true
             ),

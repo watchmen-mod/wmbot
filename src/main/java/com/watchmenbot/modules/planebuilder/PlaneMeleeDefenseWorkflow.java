@@ -1,6 +1,7 @@
 package com.watchmenbot.modules.planebuilder;
 
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
+import meteordevelopment.meteorclient.utils.player.InvUtils;
 
 final class PlaneMeleeDefenseWorkflow {
     private final PlaneActionGuards guards;
@@ -14,9 +15,14 @@ final class PlaneMeleeDefenseWorkflow {
 
     boolean tick() {
         if (!guards.readyForHotbarMutation()) return false;
-        if (targeting.nearestCloseMeleeThreat() == null) return false;
+        if (!hasImmediateThreat()) return false;
 
         FindItemResult sword = inventory.prepareUsableSword();
-        return sword != null && sword.isHotbar();
+        if (sword != null && sword.isHotbar()) InvUtils.swap(sword.slot(), false);
+        return true;
+    }
+
+    boolean hasImmediateThreat() {
+        return targeting.nearestCloseMeleeThreat() != null;
     }
 }

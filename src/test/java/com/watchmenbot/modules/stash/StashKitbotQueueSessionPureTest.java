@@ -22,6 +22,8 @@ final class StashKitbotQueueSessionPureTest {
         persistsKitbotQueueState();
         sanitizesKitbotQueueState();
         restoresPersistedQueueIntoSession();
+        tracksGatherStartNotificationState();
+        reportsNavigatorPathCapability();
     }
 
     private static void managesKitbotSessionState() {
@@ -238,11 +240,68 @@ final class StashKitbotQueueSessionPureTest {
         assertEquals(queued, session.queuedRequestsSnapshot(), "restored queue snapshot preserves order");
     }
 
+    private static void tracksGatherStartNotificationState() {
+        KitRequest request = new KitRequest(
+            "Alice",
+            "Blue EChest",
+            "blue echest",
+            2,
+            List.of(new KitSource("a", new net.minecraft.util.math.BlockPos(10, 64, 10), List.of(0), 3)),
+            new net.minecraft.util.math.BlockPos(0, 64, 0)
+        );
+
+        assertFalse(request.gather.gatherStartNotified, "new request has not announced gathering start");
+        request.gather.gatherStartNotified = true;
+        assertTrue(request.gather.gatherStartNotified, "gather start notification is tracked on the request");
+    }
+
+    private static void reportsNavigatorPathCapability() {
+        StashNavigator noPathing = new StashNavigator(null);
+        StashTarget target = target("minecraft:overworld:10,64,10", new net.minecraft.util.math.BlockPos(10, 64, 10));
+
+        assertFalse(noPathing.canPath(), "navigator without pathing reports unavailable");
+        assertFalse(noPathing.pathToScannerTarget(target, 4, java.util.Optional.of(new net.minecraft.util.math.BlockPos(9, 64, 10))), "navigator without pathing cannot start scanner path");
+
+        RecordingPathing pathing = new RecordingPathing();
+        StashNavigator navigator = new StashNavigator(pathing);
+        assertTrue(navigator.canPath(), "navigator with pathing reports available");
+        assertTrue(navigator.pathToScannerTarget(target, 4, java.util.Optional.of(new net.minecraft.util.math.BlockPos(9, 64, 10))), "navigator with pathing starts scanner path");
+        assertEquals(new net.minecraft.util.math.BlockPos(9, 64, 10), pathing.lastBlockGoal, "scanner path uses standing position");
+    }
+
     private static QueuedKitRequest queued(String requester, String kitName, int count) {
         String normalized = StashKitbotAccessPlanner.normalize(requester);
         return new QueuedKitRequest(
             new KitbotRequesterAccess(requester, normalized, KitbotTier.TIER_1, 1200),
             new KitCommand(kitName, count)
         );
+    }
+
+    private static final class RecordingPathing implements StashNavigator.BaritonePathing {
+        private net.minecraft.util.math.BlockPos lastBlockGoal;
+
+        @Override
+        public void pathNear(net.minecraft.util.math.BlockPos pos, int radius) {
+        }
+
+        @Override
+        public void pathToBlock(net.minecraft.util.math.BlockPos pos) {
+            lastBlockGoal = pos;
+        }
+
+        @Override
+        public boolean isPathing() {
+            return false;
+        }
+
+        @Override
+        public boolean hasPath() {
+            return lastBlockGoal != null;
+        }
+
+        @Override
+        public void stop() {
+            lastBlockGoal = null;
+        }
     }
 }

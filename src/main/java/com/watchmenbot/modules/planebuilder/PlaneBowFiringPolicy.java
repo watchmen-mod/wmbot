@@ -1,7 +1,8 @@
 package com.watchmenbot.modules.planebuilder;
 
 final class PlaneBowFiringPolicy {
-    static final int RELIABLE_USE_TICKS = 30;
+    static final int RELIABLE_USE_TICKS = PlaneBuilderSettings.BOW_DEFENSE_CHARGE_TICKS;
+    static final int POST_RELEASE_CLEANUP_TICKS = 2;
     static final int DRAW_START_TIMEOUT_TICKS = 12;
     static final int DRAW_STALL_TIMEOUT_TICKS = 6;
     static final int REQUIRED_AIM_SETTLE_TICKS = 4;
@@ -27,6 +28,10 @@ final class PlaneBowFiringPolicy {
 
     static boolean enoughDraw(int useTicks) {
         return useTicks >= RELIABLE_USE_TICKS;
+    }
+
+    static boolean postReleaseCleanupComplete(int cleanupTicks) {
+        return cleanupTicks >= POST_RELEASE_CLEANUP_TICKS;
     }
 
     static boolean aimStable(PlaneBowAimController.Aim previous, PlaneBowAimController.Aim current) {

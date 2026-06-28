@@ -83,6 +83,17 @@ final class StashKitbotDeliveryPlanner {
         return !teleportDetected && teleportWaitExpired;
     }
 
+    static TpaRetryDecision tpaRetryDecision(
+        boolean teleportDetected,
+        boolean pendingCooldown,
+        boolean retryDelayActive,
+        int attemptCount,
+        int maxAttempts
+    ) {
+        if (teleportDetected || pendingCooldown || retryDelayActive) return TpaRetryDecision.WAIT;
+        return attemptCount >= Math.max(1, maxAttempts) ? TpaRetryDecision.FAIL_HOME : TpaRetryDecision.RESEND_TPA;
+    }
+
     static boolean teleportArrivalDetected(BlockPos preTpaPos, BlockPos currentPos, String preTpaDimension, String currentDimension) {
         return movedFarAfterTpa(preTpaPos, currentPos) || dimensionChangedAfterTpa(preTpaDimension, currentDimension);
     }
@@ -245,6 +256,12 @@ final class StashKitbotDeliveryPlanner {
         START_DELIVERY,
         SEND_TPA,
         WAIT
+    }
+
+    enum TpaRetryDecision {
+        WAIT,
+        RESEND_TPA,
+        FAIL_HOME
     }
 
     enum DeliveryPositionDecision {

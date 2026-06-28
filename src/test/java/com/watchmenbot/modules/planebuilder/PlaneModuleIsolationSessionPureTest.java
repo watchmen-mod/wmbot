@@ -16,6 +16,8 @@ final class PlaneModuleIsolationSessionPureTest {
         restoreReturnsToOriginalSnapshot();
         restoreDisablesModulesEnabledDuringSession();
         restoresOriginallyActiveCompanionAfterCompanionCleanup();
+        emergencySuspendDisablesSessionEnabledModulesWithoutChangingRestoreSnapshot();
+        emergencySuspendIsIdempotentAndKeepsOwnerActive();
         startAndRestoreAreIdempotent();
     }
 
@@ -82,6 +84,43 @@ final class PlaneModuleIsolationSessionPureTest {
 
         assertTrue(companion.active, "originally active companion is restored after companion cleanup turns it off");
         assertEquals(4, companion.toggleCount, "companion toggles off, on for session, off for cleanup, on for restore");
+    }
+
+    private static void emergencySuspendDisablesSessionEnabledModulesWithoutChangingRestoreSnapshot() {
+        FakeModule owner = new FakeModule(true);
+        FakeModule originallyActive = new FakeModule(true);
+        FakeModule enabledDuringSession = new FakeModule(false);
+        PlaneModuleIsolationSession session = new PlaneModuleIsolationSession(
+            new FakeAccess(owner, originallyActive, enabledDuringSession)
+        );
+
+        session.start(owner);
+        enabledDuringSession.toggle();
+        session.suspendActiveNonOwnerModules(owner);
+        session.restore(owner);
+
+        assertTrue(owner.active, "owner stays active through emergency suspend");
+        assertTrue(originallyActive.active, "originally active module is restored after emergency suspend");
+        assertFalse(enabledDuringSession.active, "session-enabled module remains disabled after restore");
+        assertEquals(2, originallyActive.toggleCount, "originally active module toggles off then on");
+        assertEquals(2, enabledDuringSession.toggleCount, "session-enabled module toggles on then off");
+    }
+
+    private static void emergencySuspendIsIdempotentAndKeepsOwnerActive() {
+        FakeModule owner = new FakeModule(true);
+        FakeModule enabledDuringSession = new FakeModule(false);
+        PlaneModuleIsolationSession session = new PlaneModuleIsolationSession(new FakeAccess(owner, enabledDuringSession));
+
+        session.start(owner);
+        enabledDuringSession.toggle();
+        session.suspendActiveNonOwnerModules(owner);
+        session.suspendActiveNonOwnerModules(owner);
+
+        assertTrue(owner.active, "owner remains active after repeated emergency suspend");
+        assertFalse(enabledDuringSession.active, "session-enabled module is disabled by emergency suspend");
+        assertEquals(0, owner.toggleCount, "owner is never toggled by emergency suspend");
+        assertEquals(2, enabledDuringSession.toggleCount, "inactive session module is not toggled repeatedly");
+        assertTrue(session.active(), "emergency suspend keeps isolation session active for later restore");
     }
 
     private static void startAndRestoreAreIdempotent() {

@@ -135,6 +135,7 @@ public class PlaneBuilder extends Module {
         coordinator.reset();
         worldReadyTicks = 0;
         companionModules.suspend();
+        moduleIsolation.suspendActiveNonOwnerModules(this);
     }
 
     @EventHandler
@@ -147,6 +148,8 @@ public class PlaneBuilder extends Module {
     @EventHandler
     private void onReceiveMessage(ReceiveMessageEvent event) {
         String message = event.getMessage().getString();
+        if (shouldIgnoreReceivedMessage(message)) return;
+
         PlaneKitbotTeleportAcceptWorkflow.AcceptResult accept = coordinator.handleMessage(message);
         if (accept.accepted()) {
             logTeleportAcceptResult(accept);
@@ -163,17 +166,41 @@ public class PlaneBuilder extends Module {
         }
     }
 
+    static boolean shouldIgnoreReceivedMessage(String message) {
+        return message != null
+            && (message.contains("[Meteor] [Plane Builder]")
+            || message.contains("[Plane Builder]"));
+    }
+
     private void logTeleportAcceptResult(PlaneKitbotTeleportAcceptWorkflow.AcceptResult accept) {
         switch (accept.status()) {
-            case ARMED -> info("Armed proactive kitbot teleport accept retry: %s", accept.command());
-            case QUEUED -> info("Queued kitbot teleport accept from prompt for next tick: %s", accept.command());
-            case SENT -> {
-                if (accept.source() == PlaneKitbotTeleportAcceptWorkflow.AcceptSource.PROACTIVE) {
-                    info("Sent proactive kitbot teleport accept retry: %s", accept.command());
+            case WAITING_FOR_PROMPT -> {
+                if (accept.source() == PlaneKitbotTeleportAcceptWorkflow.AcceptSource.KITBOT_TPA) {
+                    info("Kitbot reported TPA; waiting for server teleport prompt before accepting: %s", accept.command());
                 } else {
-                    info("Sent kitbot teleport accept from prompt: %s", accept.command());
+                    info("Waiting for kitbot teleport prompt before accepting: %s", accept.command());
                 }
             }
+            case QUEUED -> {
+                if (accept.source() == PlaneKitbotTeleportAcceptWorkflow.AcceptSource.KITBOT_TPA) {
+                    info("Kitbot reported TPA; queued teleport accept: %s", accept.command());
+                } else {
+                    info("Queued kitbot teleport accept from prompt for next tick: %s", accept.command());
+                }
+            }
+            case SENT -> {
+                if (accept.source() == PlaneKitbotTeleportAcceptWorkflow.AcceptSource.KITBOT_TPA) {
+                    info("Attempted kitbot teleport accept from kitbot TPA notice: %s", accept.command());
+                } else if (accept.source() == PlaneKitbotTeleportAcceptWorkflow.AcceptSource.LEGACY_FALLBACK) {
+                    info("Attempted legacy kitbot teleport accept fallback after active delivery without server prompt: %s", accept.command());
+                } else {
+                    info("Attempted kitbot teleport accept from prompt: %s", accept.command());
+                }
+            }
+            case CONFIRMED -> info("Kitbot teleport accept confirmed by server: %s", accept.command());
+            case REQUEST_GONE -> info("Kitbot teleport accept request is no longer pending; stopped accept retries: %s", accept.command());
+            case DELIVERY_FAILED -> info("Stopped kitbot teleport accept because delivery failed or timed out; kitbot refill retry cooldown is active: %s", accept.command());
+            case DELIVERY_FINISHED -> info("Stopped kitbot teleport accept because delivery finished: %s", accept.command());
             case FAILED_CLIENT_NOT_READY -> warning("Kitbot teleport accept could not be sent.");
             default -> {
             }
@@ -187,6 +214,7 @@ public class PlaneBuilder extends Module {
             coordinator.reset();
             worldReadyTicks = 0;
             companionModules.suspend();
+            moduleIsolation.suspendActiveNonOwnerModules(this);
         }
     }
 
@@ -196,6 +224,7 @@ public class PlaneBuilder extends Module {
             coordinator.reset();
             worldReadyTicks = 0;
             companionModules.suspend();
+            moduleIsolation.suspendActiveNonOwnerModules(this);
             return;
         }
 

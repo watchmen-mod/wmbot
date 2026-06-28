@@ -17,9 +17,7 @@ final class PlaneKitbotMessenger {
             settings.enabled().get(),
             settings.nickname().get(),
             settings.kitName().get(),
-            settings.kitCount().get(),
-            settings.whisperCommand().get(),
-            settings.teleportAcceptCommand().get()
+            settings.kitCount().get()
         );
         this.sender = message -> ChatUtils.sendPlayerMsg(message, true);
         this.clientReady = () -> mc.player != null && mc.world != null;
@@ -69,8 +67,20 @@ final class PlaneKitbotMessenger {
         return PlaneKitbotRefillDecisions.teleportPromptMatches(config.get(), message);
     }
 
+    boolean teleportAcceptConfirmed(String message) {
+        return PlaneKitbotRefillDecisions.teleportAcceptConfirmed(config.get(), message);
+    }
+
+    boolean teleportRequestGone(String message) {
+        return PlaneKitbotRefillDecisions.teleportRequestGone(config.get(), message);
+    }
+
     PlaneKitbotRefillDecisions.IgnoredTeleportPrompt ignoredTeleportPrompt(String message) {
         return PlaneKitbotRefillDecisions.ignoredTeleportPrompt(config.get(), message);
+    }
+
+    PlaneKitbotRefillDecisions.KitbotDeliveryMessage kitbotDeliveryMessage(String message) {
+        return PlaneKitbotRefillDecisions.kitbotDeliveryMessage(config.get(), message);
     }
 
     boolean sendTeleportAccept() {

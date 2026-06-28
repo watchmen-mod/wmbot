@@ -43,6 +43,11 @@ final class ServiceHoleContext {
         return hole != null && support != null;
     }
 
+    void select(BlockPos hole) {
+        this.hole = hole;
+        support = hole == null ? null : hole.down();
+    }
+
     BlockPos hole() {
         return hole;
     }
@@ -59,6 +64,10 @@ final class ServiceHoleContext {
     void markSelectedBlocked() {
         if (hole != null) blockedHoles.add(hole.toImmutable());
         clear();
+    }
+
+    boolean blocked(BlockPos pos) {
+        return blockedHoles.contains(pos);
     }
 
     boolean supportValid() {

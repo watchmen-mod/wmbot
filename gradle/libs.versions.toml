@@ -1,5 +1,5 @@
 [versions]
-mod-version = "0.5.49"
+mod-version = "0.5.50"
 
 # Fabric / Minecraft
 jdk = "21"

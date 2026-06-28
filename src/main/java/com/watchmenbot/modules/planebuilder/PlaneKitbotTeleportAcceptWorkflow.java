@@ -1,16 +1,18 @@
 package com.watchmenbot.modules.planebuilder;
 
 final class PlaneKitbotTeleportAcceptWorkflow {
-    private static final int REQUEST_ACCEPT_INITIAL_DELAY_TICKS = 40;
-    private static final int REQUEST_ACCEPT_RETRY_TICKS = 100;
+    private static final int PROMPT_ACCEPT_INITIAL_DELAY_TICKS = 40;
+    private static final int LEGACY_FALLBACK_ACCEPT_DELAY_TICKS = 100;
 
     private final PlaneKitbotMessenger messenger;
 
     private boolean promptAccepted;
     private String queuedCommand;
     private AcceptSource queuedSource = AcceptSource.PROMPT;
-    private boolean requestAcceptArmed;
-    private int requestAcceptTicks;
+    private int queuedCommandTicks;
+    private boolean legacyFallbackArmed;
+    private boolean legacyFallbackSent;
+    private int legacyFallbackTicks;
 
     PlaneKitbotTeleportAcceptWorkflow(PlaneKitbotMessenger messenger) {
         this.messenger = messenger;
@@ -18,17 +20,67 @@ final class PlaneKitbotTeleportAcceptWorkflow {
 
     void reset() {
         promptAccepted = false;
-        requestAcceptArmed = false;
-        requestAcceptTicks = 0;
         clearQueue();
+        clearLegacyFallback();
     }
 
     void clearQueue() {
         queuedCommand = null;
         queuedSource = AcceptSource.PROMPT;
+        queuedCommandTicks = 0;
     }
 
-    AcceptResult handlePrompt(String message) {
+    AcceptResult queueConfiguredAcceptFromKitbotTpa() {
+        if (promptAccepted || queuedCommand != null) return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.KITBOT_TPA);
+
+        String command = messenger.teleportAcceptCommand();
+        if (command == null) return new AcceptResult(AcceptStatus.FAILED_CLIENT_NOT_READY, null, AcceptSource.KITBOT_TPA);
+
+        armLegacyFallback();
+        return new AcceptResult(AcceptStatus.WAITING_FOR_PROMPT, command, AcceptSource.KITBOT_TPA);
+    }
+
+    AcceptResult armLegacyFallbackAfterActiveRequest() {
+        if (promptAccepted || queuedCommand != null || legacyFallbackArmed || legacyFallbackSent) {
+            return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.LEGACY_FALLBACK);
+        }
+
+        String command = messenger.teleportAcceptCommand();
+        if (command == null) return new AcceptResult(AcceptStatus.FAILED_CLIENT_NOT_READY, null, AcceptSource.LEGACY_FALLBACK);
+
+        armLegacyFallback();
+        return new AcceptResult(AcceptStatus.IGNORED, command, AcceptSource.LEGACY_FALLBACK);
+    }
+
+    AcceptResult clearAfterDeliveryFailure() {
+        promptAccepted = true;
+        clearQueue();
+        clearLegacyFallback();
+        return new AcceptResult(AcceptStatus.DELIVERY_FAILED, messenger.teleportAcceptCommand(), AcceptSource.DELIVERY);
+    }
+
+    AcceptResult clearAfterDeliveryFinished() {
+        promptAccepted = true;
+        clearQueue();
+        clearLegacyFallback();
+        return new AcceptResult(AcceptStatus.DELIVERY_FINISHED, messenger.teleportAcceptCommand(), AcceptSource.DELIVERY);
+    }
+
+    AcceptResult handleMessage(String message) {
+        if (messenger.teleportAcceptConfirmed(message)) {
+            promptAccepted = true;
+            clearQueue();
+            clearLegacyFallback();
+            return new AcceptResult(AcceptStatus.CONFIRMED, messenger.teleportAcceptCommand(), AcceptSource.PROMPT);
+        }
+
+        if (messenger.teleportRequestGone(message)) {
+            promptAccepted = true;
+            clearQueue();
+            clearLegacyFallback();
+            return new AcceptResult(AcceptStatus.REQUEST_GONE, messenger.teleportAcceptCommand(), AcceptSource.PROMPT);
+        }
+
         if (!messenger.teleportPromptMatches(message)) return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.PROMPT);
         if (promptAccepted || queuedCommand != null) return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.PROMPT);
 
@@ -37,19 +89,20 @@ final class PlaneKitbotTeleportAcceptWorkflow {
 
         queuedCommand = command;
         queuedSource = AcceptSource.PROMPT;
+        queuedCommandTicks = PROMPT_ACCEPT_INITIAL_DELAY_TICKS;
+        clearLegacyFallback();
         return new AcceptResult(AcceptStatus.QUEUED, command, AcceptSource.PROMPT);
     }
 
     boolean queueFromPrompt(String message) {
-        return handlePrompt(message).accepted();
+        return handleMessage(message).accepted();
     }
 
     AcceptResult queueConfiguredAcceptForRequest() {
         promptAccepted = false;
-        requestAcceptArmed = true;
-        requestAcceptTicks = REQUEST_ACCEPT_INITIAL_DELAY_TICKS;
-        String command = messenger.teleportAcceptCommand();
-        return new AcceptResult(command == null ? AcceptStatus.FAILED_CLIENT_NOT_READY : AcceptStatus.ARMED, command, AcceptSource.PROACTIVE);
+        legacyFallbackSent = false;
+        clearLegacyFallback();
+        return new AcceptResult(AcceptStatus.WAITING_FOR_PROMPT, messenger.teleportAcceptCommand(), AcceptSource.PROMPT);
     }
 
     boolean hasQueuedCommand() {
@@ -58,33 +111,49 @@ final class PlaneKitbotTeleportAcceptWorkflow {
 
     AcceptResult tick() {
         if (queuedCommand != null) return sendQueuedCommand();
-        return tickRequestAccept();
+        if (legacyFallbackArmed) return tickLegacyFallback();
+        return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.PROMPT);
     }
 
     private AcceptResult sendQueuedCommand() {
+        if (queuedCommandTicks > 0) {
+            queuedCommandTicks--;
+            return new AcceptResult(AcceptStatus.IGNORED, queuedCommand, AcceptSource.PROMPT);
+        }
+
         AcceptSource source = queuedSource;
         String command = queuedCommand;
         if (!messenger.sendCommand(command)) return new AcceptResult(AcceptStatus.FAILED_CLIENT_NOT_READY, command, source);
 
-        if (source == AcceptSource.PROMPT) promptAccepted = true;
+        promptAccepted = true;
         clearQueue();
+        clearLegacyFallback();
         return new AcceptResult(AcceptStatus.SENT, command, source);
     }
 
-    private AcceptResult tickRequestAccept() {
-        if (!requestAcceptArmed) return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.PROACTIVE);
-        if (requestAcceptTicks > 0) {
-            requestAcceptTicks--;
-            if (requestAcceptTicks > 0) return new AcceptResult(AcceptStatus.IGNORED, null, AcceptSource.PROACTIVE);
+    private void armLegacyFallback() {
+        legacyFallbackArmed = true;
+        legacyFallbackTicks = LEGACY_FALLBACK_ACCEPT_DELAY_TICKS;
+    }
+
+    private void clearLegacyFallback() {
+        legacyFallbackArmed = false;
+        legacyFallbackTicks = 0;
+    }
+
+    private AcceptResult tickLegacyFallback() {
+        if (legacyFallbackTicks > 0) {
+            legacyFallbackTicks--;
+            return new AcceptResult(AcceptStatus.IGNORED, messenger.teleportAcceptCommand(), AcceptSource.LEGACY_FALLBACK);
         }
 
         String command = messenger.teleportAcceptCommand();
-        requestAcceptTicks = REQUEST_ACCEPT_RETRY_TICKS;
-        if (command == null || !messenger.sendCommand(command)) {
-            return new AcceptResult(AcceptStatus.FAILED_CLIENT_NOT_READY, command, AcceptSource.PROACTIVE);
-        }
+        if (!messenger.sendCommand(command)) return new AcceptResult(AcceptStatus.FAILED_CLIENT_NOT_READY, command, AcceptSource.LEGACY_FALLBACK);
 
-        return new AcceptResult(AcceptStatus.SENT, command, AcceptSource.PROACTIVE);
+        promptAccepted = true;
+        legacyFallbackSent = true;
+        clearLegacyFallback();
+        return new AcceptResult(AcceptStatus.SENT, command, AcceptSource.LEGACY_FALLBACK);
     }
 
     record AcceptResult(AcceptStatus status, String command, AcceptSource source) {
@@ -99,14 +168,20 @@ final class PlaneKitbotTeleportAcceptWorkflow {
 
     enum AcceptStatus {
         IGNORED,
-        ARMED,
+        WAITING_FOR_PROMPT,
         QUEUED,
         SENT,
+        CONFIRMED,
+        REQUEST_GONE,
+        DELIVERY_FAILED,
+        DELIVERY_FINISHED,
         FAILED_CLIENT_NOT_READY
     }
 
     enum AcceptSource {
         PROMPT,
-        PROACTIVE
+        KITBOT_TPA,
+        LEGACY_FALLBACK,
+        DELIVERY
     }
 }

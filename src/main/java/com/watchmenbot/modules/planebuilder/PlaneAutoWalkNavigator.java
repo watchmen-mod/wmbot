@@ -28,7 +28,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
 
     @Override
     public void walkTo(PlaneAutoWalkPlanner.Waypoint nextTarget) {
-        if (nextTarget == null || mc.player == null) return;
+        if (nextTarget == null || !worldReady()) {
+            stop();
+            return;
+        }
 
         elytraFly.stop();
         flightMode = FlightMode.GROUNDED;
@@ -45,7 +48,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
 
     @Override
     public boolean flyTo(PlaneAutoWalkPlanner.Waypoint nextTarget, double minY, double maxY) {
-        if (nextTarget == null || mc.player == null) return false;
+        if (nextTarget == null || !worldReady()) {
+            stop();
+            return false;
+        }
         if (!elytraFly.start()) {
             walkTo(nextTarget);
             return false;
@@ -62,7 +68,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
 
     @Override
     public boolean landAt(BlockPos landingTarget) {
-        if (landingTarget == null || mc.player == null) return false;
+        if (landingTarget == null || !worldReady()) {
+            stop();
+            return false;
+        }
         if (!elytraFly.start()) return true;
 
         updateFlightState(FlightMode.LANDING);
@@ -81,7 +90,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
 
     @Override
     public void hover(double minY, double maxY) {
-        if (mc.player == null) return;
+        if (!worldReady()) {
+            stop();
+            return;
+        }
         if (!elytraFly.start()) {
             stop();
             return;
@@ -105,7 +117,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
 
     @Override
     public void nudgeToward(BlockPos nudgeTarget) {
-        if (nudgeTarget == null || mc.player == null) return;
+        if (nudgeTarget == null || !worldReady()) {
+            stop();
+            return;
+        }
 
         elytraFly.stop();
         flightMode = FlightMode.GROUNDED;
@@ -181,6 +196,10 @@ final class PlaneAutoWalkNavigator implements PlaneAutoWalkController.Navigator 
         else if (requestedMode == FlightMode.LANDING) flightMode = FlightMode.LANDING;
 
         flightTicks++;
+    }
+
+    private boolean worldReady() {
+        return mc.player != null && mc.world != null;
     }
 
     private double horizontalDistanceSquaredTo(BlockPos pos) {

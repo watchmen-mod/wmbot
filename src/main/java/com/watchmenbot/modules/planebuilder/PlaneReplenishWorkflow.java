@@ -181,6 +181,7 @@ final class PlaneReplenishWorkflow {
         phase = Phase.IDLE;
         missingPickaxeReturnPhase = null;
         serviceHole.reset();
+        serviceHoles.resetOpenWatchdog();
         enderChestFarm.resetFarmProgress();
         managedShulkers.reset();
         refillPhases.reset();
@@ -226,6 +227,7 @@ final class PlaneReplenishWorkflow {
 
     void begin() {
         serviceHole.reset();
+        serviceHoles.resetOpenWatchdog();
         enderChestFarm.resetFarmProgress();
         refillPhases.beginReplenishCycle();
         cleanup.beginCleanupCycle();
@@ -250,6 +252,9 @@ final class PlaneReplenishWorkflow {
         }
         if (previousPhase != Phase.SELECTING_SERVICE_HOLE && phase == Phase.SELECTING_SERVICE_HOLE) {
             enderChestFarm.resetFarmProgress();
+        }
+        if (previousPhase == Phase.OPENING_SERVICE_HOLE && phase != Phase.OPENING_SERVICE_HOLE) {
+            serviceHoles.resetOpenWatchdog();
         }
         return new ReplenishTickResult(phase, allowsBowDefenseDuringReplenish());
     }

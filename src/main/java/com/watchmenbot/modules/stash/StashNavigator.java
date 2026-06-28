@@ -16,32 +16,42 @@ final class StashNavigator {
         pathing = BaritoneCompatibility.available() ? new BaritoneStashNavigator() : null;
     }
 
-    void pathNear(StashTarget target, int interactionRange) {
-        if (pathing == null) return;
+    StashNavigator(BaritonePathing pathing) {
+        this.pathing = pathing;
+    }
+
+    boolean canPath() {
+        return pathing != null;
+    }
+
+    boolean pathNear(StashTarget target, int interactionRange) {
+        if (pathing == null) return false;
 
         int radius = Math.max(2, interactionRange);
         rememberGoal("near:" + target.id() + ":" + radius);
         pathing.pathNear(target.interactionPos(), radius);
+        return true;
     }
 
-    void pathToScannerTarget(StashTarget target, int interactionRange, Optional<BlockPos> standingPos) {
-        if (pathing == null) return;
+    boolean pathToScannerTarget(StashTarget target, int interactionRange, Optional<BlockPos> standingPos) {
+        if (pathing == null) return false;
 
         if (standingPos.isEmpty()) {
-            pathNear(target, interactionRange);
-            return;
+            return pathNear(target, interactionRange);
         }
 
         BlockPos pos = standingPos.get();
         rememberGoal(scannerGoalKey(target, interactionRange, standingPos));
         pathing.pathToBlock(pos);
+        return true;
     }
 
-    void returnTo(BlockPos startPos) {
-        if (pathing == null) return;
+    boolean returnTo(BlockPos startPos) {
+        if (pathing == null) return false;
 
         rememberGoal("return:" + startPos.getX() + "," + startPos.getY() + "," + startPos.getZ());
         pathing.pathNear(startPos, 1);
+        return true;
     }
 
     void ensurePathNear(StashTarget target, int interactionRange) {
@@ -52,11 +62,11 @@ final class StashNavigator {
         pathNear(target, interactionRange);
     }
 
-    void ensureScannerPathTo(StashTarget target, int interactionRange, Optional<BlockPos> standingPos) {
+    boolean ensureScannerPathTo(StashTarget target, int interactionRange, Optional<BlockPos> standingPos) {
         String goalKey = scannerGoalKey(target, interactionRange, standingPos);
-        if (!shouldRepath(goalKey)) return;
+        if (!shouldRepath(goalKey)) return true;
 
-        pathToScannerTarget(target, interactionRange, standingPos);
+        return pathToScannerTarget(target, interactionRange, standingPos);
     }
 
     void ensureReturnTo(BlockPos startPos) {

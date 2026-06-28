@@ -21,9 +21,16 @@ final class PlaneBuilderSettings {
     static final int ROTATION_PRIORITY = BUILD_CONFIG.rotationPriority();
     static final int REPLENISH_MIN_OBSIDIAN = BUILD_CONFIG.replenishMinBuildBlocks();
     static final int REPLENISH_TARGET_OBSIDIAN = BUILD_CONFIG.replenishTargetBuildBlocks();
-    static final int PICKAXE_DURABILITY_THRESHOLD_PERCENT = 10;
-    static final double ENDERMAN_LOOK_RADIUS = 64.0;
+    static final double BOW_DEFENSE_RANGE = 24.0;
+    static final int BOW_DEFENSE_CHARGE_TICKS = 35;
+    static final int AUTO_WALK_WAYPOINT_RADIUS = 2;
+    static final int AUTO_ELYTRA_SOLID_LOOKAHEAD = 10;
+    static final int PICKAXE_DURABILITY_THRESHOLD_PERCENT = 5;
+    static final int WEAPON_DURABILITY_THRESHOLD_PERCENT = 10;
+    static final double ENDERMAN_LOOK_RADIUS = 24.0;
     static final int SAFE_IDLE_LOOK_PITCH = 75;
+    static final String KITBOT_WHISPER_COMMAND = "/w";
+    static final String KITBOT_TELEPORT_ACCEPT_COMMAND = "/tpy";
 
     private PlaneBuilderSettings() {
     }
@@ -57,6 +64,13 @@ final class PlaneBuilderSettings {
             .build()
         );
 
+        Setting<Boolean> fullbright = group.add(new BoolSetting.Builder()
+            .name("fullbright")
+            .description("Enables Fullbright while Plane Builder is active.")
+            .defaultValue(true)
+            .build()
+        );
+
         Setting<Boolean> killAura = group.add(new BoolSetting.Builder()
             .name("kill-aura")
             .description("Enables Kill Aura while Plane Builder is active.")
@@ -71,7 +85,7 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        return new CompanionModules(autoTotem, autoEat, velocity, instantRebreak, killAura, noRender);
+        return new CompanionModules(autoTotem, autoEat, velocity, instantRebreak, fullbright, killAura, noRender);
     }
 
     static BowDefense bowDefense(SettingGroup group) {
@@ -82,25 +96,7 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        Setting<Double> range = group.add(new DoubleSetting.Builder()
-            .name("bow-range")
-            .description("Maximum range for defensive bow targets.")
-            .defaultValue(20.0)
-            .range(1.0, 100.0)
-            .sliderRange(1.0, 100.0)
-            .build()
-        );
-
-        Setting<Integer> chargeTicks = group.add(new IntSetting.Builder()
-            .name("bow-charge-ticks")
-            .description("Ticks to charge the bow before checking for a direct-hit shot.")
-            .defaultValue(20)
-            .range(5, 20)
-            .sliderRange(5, 20)
-            .build()
-        );
-
-        return new BowDefense(enabled, range, chargeTicks);
+        return new BowDefense(enabled);
     }
 
     static AutoWalk autoWalk(SettingGroup group) {
@@ -111,15 +107,6 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        Setting<Integer> waypointRadius = group.add(new IntSetting.Builder()
-            .name("auto-walk-waypoint-radius")
-            .description("Horizontal distance from a snake waypoint that counts as reached.")
-            .defaultValue(2)
-            .range(1, 16)
-            .sliderRange(1, 16)
-            .build()
-        );
-
         Setting<Boolean> autoElytraFly = group.add(new BoolSetting.Builder()
             .name("auto-elytra-fly")
             .description("Uses low auto elytra flight while auto-walking across long solid or hazardous runs.")
@@ -127,17 +114,7 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        Setting<Integer> autoElytraSolidLookahead = group.add(new IntSetting.Builder()
-            .name("auto-elytra-solid-lookahead")
-            .description("Route-ahead solid or hazardous block run that triggers low auto elytra flight.")
-            .defaultValue(20)
-            .range(1, 128)
-            .sliderRange(1, 64)
-            .visible(autoElytraFly::get)
-            .build()
-        );
-
-        return new AutoWalk(enabled, waypointRadius, autoElytraFly, autoElytraSolidLookahead);
+        return new AutoWalk(enabled, autoElytraFly);
     }
 
     static HoleEscape holeEscape(SettingGroup group) {
@@ -213,16 +190,7 @@ final class PlaneBuilderSettings {
             .build()
         );
 
-        Setting<Integer> idlePitch = group.add(new IntSetting.Builder()
-            .name("safe-idle-look-pitch")
-            .description("Downward pitch used when Plane Builder is idle or skips an unsafe look.")
-            .defaultValue(SAFE_IDLE_LOOK_PITCH)
-            .range(45, 90)
-            .sliderRange(45, 90)
-            .build()
-        );
-
-        return new EndermanLookSafety(enabled, radius, idlePitch);
+        return new EndermanLookSafety(enabled, radius);
     }
 
     static Block buildBlock() {
@@ -234,23 +202,20 @@ final class PlaneBuilderSettings {
         Setting<Boolean> autoEat,
         Setting<Boolean> velocity,
         Setting<Boolean> instantRebreak,
+        Setting<Boolean> fullbright,
         Setting<Boolean> killAura,
         Setting<Boolean> noRender
     ) {
     }
 
     record BowDefense(
-        Setting<Boolean> enabled,
-        Setting<Double> range,
-        Setting<Integer> chargeTicks
+        Setting<Boolean> enabled
     ) {
     }
 
     record AutoWalk(
         Setting<Boolean> enabled,
-        Setting<Integer> waypointRadius,
-        Setting<Boolean> autoElytraFly,
-        Setting<Integer> autoElytraSolidLookahead
+        Setting<Boolean> autoElytraFly
     ) {
     }
 
@@ -270,9 +235,7 @@ final class PlaneBuilderSettings {
         Setting<Boolean> enabled,
         Setting<String> nickname,
         Setting<String> kitName,
-        Setting<Integer> kitCount,
-        Setting<String> whisperCommand,
-        Setting<String> teleportAcceptCommand
+        Setting<Integer> kitCount
     ) {
     }
 
@@ -287,8 +250,7 @@ final class PlaneBuilderSettings {
 
     record EndermanLookSafety(
         Setting<Boolean> enabled,
-        Setting<Double> radius,
-        Setting<Integer> idlePitch
+        Setting<Double> radius
     ) implements PlaneEndermanLookSafety.Config {
         @Override
         public boolean endermanLookSafetyEnabled() {
@@ -300,9 +262,5 @@ final class PlaneBuilderSettings {
             return radius.get();
         }
 
-        @Override
-        public int safeIdleLookPitch() {
-            return idlePitch.get();
-        }
     }
 }

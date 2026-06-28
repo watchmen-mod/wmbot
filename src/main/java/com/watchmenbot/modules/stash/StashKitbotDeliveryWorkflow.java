@@ -4,6 +4,9 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 
 final class StashKitbotDeliveryWorkflow {
+    private static final int TPA_RETRY_TICKS = 20 * 15;
+    private static final int MAX_TPA_ATTEMPTS = 4;
+
     private final MinecraftClient mc;
     private final StashKitbotSession session;
     private final StashNavigator navigator;
@@ -119,18 +122,7 @@ final class StashKitbotDeliveryWorkflow {
         request.delivery.preTpaDimension = StashClientUtils.dimensionId(mc);
         request.delivery.crossDimensionDelivery = false;
         request.delivery.deliveryTraceTicks = 0;
-        int attemptId = request.delivery.commands.beginPending(PendingCommand.TPA, request.requester, KitbotPhase.WAITING_FOR_TPY);
-        if (!messenger.sendCommand(settings.tpaCommand(), request.requester, PendingCommand.TPA)) {
-            request.delivery.commands.clearPending();
-            request.delivery.commands.tpaSent = false;
-            postTeleportFailure("Could not send TPA command because the configured command is blank. Heading home with the kits.");
-            return;
-        }
-
-        request.delivery.commands.markSent(PendingCommand.TPA);
-        events.info("Sent TPA command attempt %d to %s.", attemptId, request.requester);
-        request.delivery.teleportWait.reset(settings.teleportTimeoutTicks());
-        session.phase(KitbotPhase.WAITING_FOR_TPY);
+        sendTpaAttempt(request, settings, false);
     }
 
     private void tickWaitingForTpy(Settings settings) {
@@ -138,6 +130,8 @@ final class StashKitbotDeliveryWorkflow {
         lookDown(settings);
         positionWorkflow.logCrossDimensionWait(request, settings, "waiting_for_tpy");
         if (tryStartDeliveryAfterTeleport(settings)) return;
+
+        if (handleTpaRetry(request, settings)) return;
 
         if (StashKitbotDeliveryPlanner.tpaTimeoutShouldReturn(false, request.delivery.teleportWait.tickExpired())) {
             commandWorkflow.clearPendingCommandIf(PendingCommand.TPA);
@@ -194,6 +188,59 @@ final class StashKitbotDeliveryWorkflow {
         session.phase(KitbotPhase.REACQUIRE_REQUESTER);
         events.info("Detected teleport for %s. Waiting for requester entity to load.", request.requester);
         return true;
+    }
+
+    private boolean handleTpaRetry(KitRequest request, Settings settings) {
+        boolean retryDelayActive = request.delivery.tpaRetryTicks > 0;
+        if (request.delivery.tpaRetryTicks > 0) request.delivery.tpaRetryTicks--;
+
+        StashKitbotDeliveryPlanner.TpaRetryDecision decision = StashKitbotDeliveryPlanner.tpaRetryDecision(
+            false,
+            request.delivery.pendingCommandCooldown.active(),
+            retryDelayActive,
+            request.delivery.tpaAttemptCount,
+            MAX_TPA_ATTEMPTS
+        );
+        if (decision == StashKitbotDeliveryPlanner.TpaRetryDecision.WAIT) return false;
+        if (decision == StashKitbotDeliveryPlanner.TpaRetryDecision.FAIL_HOME) {
+            commandWorkflow.clearPendingCommandIf(PendingCommand.TPA);
+            events.reply(
+                request.requester,
+                "Delivery timed out after %d TPA attempts. Returning to stash position.".formatted(request.delivery.tpaAttemptCount)
+            );
+            completionWorkflow.beginReturnToOrigin(settings);
+            return true;
+        }
+
+        sendTpaAttempt(request, settings, true);
+        return true;
+    }
+
+    private void sendTpaAttempt(KitRequest request, Settings settings, boolean retry) {
+        int attemptId = request.delivery.commands.beginPending(PendingCommand.TPA, request.requester, KitbotPhase.WAITING_FOR_TPY);
+        if (!messenger.sendCommand(settings.tpaCommand(), request.requester, PendingCommand.TPA)) {
+            request.delivery.commands.clearPending();
+            request.delivery.commands.tpaSent = false;
+            postTeleportFailure("Could not send TPA command because the configured command is blank. Heading home with the kits.");
+            return;
+        }
+
+        request.delivery.commands.markSent(PendingCommand.TPA);
+        request.delivery.tpaAttemptCount++;
+        request.delivery.tpaRetryTicks = TPA_RETRY_TICKS;
+        if (request.delivery.tpaAttemptCount == 1) {
+            events.queueReply(request.requester, "Gathering complete; sending TPA now.");
+        }
+        else {
+            events.queueReply(request.requester, "Still waiting for /tpy; retrying TPA attempt %d.".formatted(request.delivery.tpaAttemptCount));
+        }
+        events.info("%s TPA command attempt %d to %s.",
+            retry ? "Retried" : "Sent",
+            attemptId,
+            request.requester
+        );
+        request.delivery.teleportWait.reset(settings.teleportTimeoutTicks());
+        session.phase(KitbotPhase.WAITING_FOR_TPY);
     }
 
     private void lookDown(Settings settings) {

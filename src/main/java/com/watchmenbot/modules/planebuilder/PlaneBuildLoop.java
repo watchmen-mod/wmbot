@@ -125,7 +125,7 @@ final class PlaneBuildLoop {
             );
         }
 
-        autoWalk.pause();
+        autoWalk.suspend();
         placeTarget(target, obsidian);
         return PlaneBuildLoopDecisions.resultFor(
             config.replenishMinBuildBlocks(),

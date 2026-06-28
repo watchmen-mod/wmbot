@@ -4,6 +4,7 @@ import net.minecraft.util.math.BlockPos;
 
 final class PlaneAutoWalkController {
     private static final int POST_LANDING_AUTO_ELYTRA_COOLDOWN_TICKS = 40;
+    private static final int ROUTE_RECOVERY_CORRIDOR_MULTIPLIER = 3;
 
     private final AutoWalkConfig config;
     private final PlaneRuntimeConfig runtimeConfig;
@@ -35,11 +36,6 @@ final class PlaneAutoWalkController {
                 }
 
                 @Override
-                public int waypointRadius() {
-                    return settings.waypointRadius().get();
-                }
-
-                @Override
                 public boolean autoElytraFlyEnabled() {
                     return settings.autoElytraFly().get();
                 }
@@ -49,10 +45,6 @@ final class PlaneAutoWalkController {
                     settings.autoElytraFly().set(false);
                 }
 
-                @Override
-                public int autoElytraSolidLookahead() {
-                    return settings.autoElytraSolidLookahead().get();
-                }
             },
             runtimeConfig,
             new PlaneAutoWalkPlanner(runtimeConfig),
@@ -75,11 +67,6 @@ final class PlaneAutoWalkController {
                 }
 
                 @Override
-                public int waypointRadius() {
-                    return settings.waypointRadius().get();
-                }
-
-                @Override
                 public boolean autoElytraFlyEnabled() {
                     return settings.autoElytraFly().get();
                 }
@@ -89,10 +76,6 @@ final class PlaneAutoWalkController {
                     settings.autoElytraFly().set(false);
                 }
 
-                @Override
-                public int autoElytraSolidLookahead() {
-                    return settings.autoElytraSolidLookahead().get();
-                }
             },
             runtimeConfig,
             new PlaneAutoWalkPlanner(runtimeConfig),
@@ -129,10 +112,8 @@ final class PlaneAutoWalkController {
             return Phase.IDLE;
         }
 
-        int radius = Math.max(1, config.waypointRadius());
-        if (state == null) {
-            state = planner.initialState(playerPos.getX(), playerPos.getZ());
-        }
+        int radius = PlaneBuilderSettings.AUTO_WALK_WAYPOINT_RADIUS;
+        ensureValidState(playerPos, radius);
 
         PlaneAutoWalkPlanner.Waypoint waypoint = planner.waypoint(state);
         if (waypoint == null) {
@@ -140,10 +121,10 @@ final class PlaneAutoWalkController {
             return Phase.IDLE;
         }
 
-        while (horizontalDistanceSquared(playerPos, waypoint) <= (long) radius * radius) {
+        while (planner.endpointReached(state, playerPos.getX(), playerPos.getZ(), radius)) {
             PlaneAutoWalkPlanner.AutoWalkState nextState = planner.advance(state);
             if (nextState.equals(state)) {
-                pause();
+                suspend();
                 return Phase.IDLE;
             }
 
@@ -205,6 +186,10 @@ final class PlaneAutoWalkController {
     }
 
     void pause() {
+        suspend();
+    }
+
+    void suspend() {
         navigator.stop();
     }
 
@@ -212,7 +197,7 @@ final class PlaneAutoWalkController {
         state = null;
         autoElytraLockout = LockoutReason.NONE;
         autoElytraGroundedCooldownTicks = 0;
-        pause();
+        suspend();
     }
 
     void lockAutoElytra(LockoutReason reason) {
@@ -231,22 +216,27 @@ final class PlaneAutoWalkController {
         return navigator.flying();
     }
 
+    PlaneAutoWalkPlanner.Segment activeSegment() {
+        return state == null ? null : planner.segment(state);
+    }
+
     void nudgeTowardPlacementTarget(BlockPos target) {
         if (target == null || navigator.flying()) return;
 
         navigator.nudgeToward(target);
     }
 
-    private static long horizontalDistanceSquared(BlockPos playerPos, PlaneAutoWalkPlanner.Waypoint waypoint) {
-        long dx = (long) playerPos.getX() - waypoint.x();
-        long dz = (long) playerPos.getZ() - waypoint.z();
-        return dx * dx + dz * dz;
+    private void ensureValidState(BlockPos playerPos, int radius) {
+        int corridor = Math.max(runtimeConfig.scanRadius() * ROUTE_RECOVERY_CORRIDOR_MULTIPLIER, radius * 2);
+        if (state == null || !planner.compatibleWithSegment(state, playerPos.getX(), playerPos.getZ(), corridor)) {
+            state = planner.initialState(playerPos.getX(), playerPos.getZ());
+        }
     }
 
     private boolean shouldFly(PlaneAutoWalkPlanner.Segment segment, BlockPos playerPos) {
         if (!config.autoElytraFlyEnabled() || autoElytraLockedOut() || autoElytraScanner == null) return false;
 
-        int lookahead = config.autoElytraSolidLookahead();
+        int lookahead = PlaneBuilderSettings.AUTO_ELYTRA_SOLID_LOOKAHEAD;
         if (autoElytraScanner.hazardAhead(segment, playerPos, lookahead)) return true;
 
         return autoElytraGroundedCooldownTicks <= 0
@@ -273,8 +263,6 @@ final class PlaneAutoWalkController {
     interface AutoWalkConfig {
         boolean enabled();
 
-        int waypointRadius();
-
         default boolean autoElytraFlyEnabled() {
             return false;
         }
@@ -282,9 +270,6 @@ final class PlaneAutoWalkController {
         default void disableAutoElytraFly() {
         }
 
-        default int autoElytraSolidLookahead() {
-            return 20;
-        }
     }
 
     interface Navigator {

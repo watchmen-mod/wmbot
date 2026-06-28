@@ -59,6 +59,19 @@ final class PlaneModuleIsolationSession {
         applied = false;
     }
 
+    void suspendActiveNonOwnerModules(Module owner) {
+        suspendActiveNonOwnerModules((Object) owner);
+    }
+
+    void suspendActiveNonOwnerModules(Object owner) {
+        if (!applied) return;
+
+        for (Object module : moduleAccess.all()) {
+            if (module == owner) continue;
+            if (moduleAccess.active(module)) moduleAccess.toggle(module);
+        }
+    }
+
     boolean active() {
         return applied;
     }

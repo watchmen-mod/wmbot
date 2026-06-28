@@ -9,7 +9,9 @@ final class PlaneKitbotDeliveryTracker {
     private boolean pending;
     private boolean requestSentThisCycle;
     private boolean requestSent;
+    private boolean kitbotRequestActive;
     private int requestRetryTicks;
+    private int failureRetryCooldownTicks;
     private DeliveryBaseline deliveryBaseline;
 
     PlaneKitbotDeliveryTracker(PlaneKitbotSupplyProbe supplyProbe, PlaneKitbotDroppedSupplyTracker droppedSupply) {
@@ -21,7 +23,9 @@ final class PlaneKitbotDeliveryTracker {
         pending = false;
         requestSentThisCycle = false;
         requestSent = false;
+        kitbotRequestActive = false;
         requestRetryTicks = 0;
+        failureRetryCooldownTicks = 0;
         deliveryBaseline = null;
         droppedSupply.reset();
     }
@@ -32,6 +36,26 @@ final class PlaneKitbotDeliveryTracker {
 
     void beginReplenishCycle() {
         requestSentThisCycle = false;
+    }
+
+    void handleKitbotDeliveryMessage(PlaneKitbotRefillDecisions.KitbotDeliveryMessage message) {
+        if (message == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.ACTIVE
+            || message == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.TPA_REQUESTED
+            || message == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.DELIVERED) {
+            if (pending) kitbotRequestActive = true;
+            return;
+        }
+
+        if (message == PlaneKitbotRefillDecisions.KitbotDeliveryMessage.FAILED) {
+            pending = false;
+            requestSentThisCycle = false;
+            requestSent = false;
+            kitbotRequestActive = false;
+            requestRetryTicks = 0;
+            failureRetryCooldownTicks = REQUEST_RETRY_TICKS;
+            deliveryBaseline = null;
+            droppedSupply.reset();
+        }
     }
 
     Phase inventoryDeliveryPhase() {
@@ -58,8 +82,8 @@ final class PlaneKitbotDeliveryTracker {
 
     Phase requestOrMissingSupply(PlaneKitbotMessenger messenger) {
         requestSent = false;
-        requestIfNeeded(messenger);
-        return pending ? Phase.WAITING_FOR_KITBOT_REFILL : Phase.MISSING_ENDER_CHEST_SHULKER;
+        boolean waiting = requestIfNeeded(messenger);
+        return waiting ? Phase.WAITING_FOR_KITBOT_REFILL : Phase.MISSING_ENDER_CHEST_SHULKER;
     }
 
     boolean consumeRequestSent() {
@@ -71,7 +95,9 @@ final class PlaneKitbotDeliveryTracker {
     void markSuppliesAvailable() {
         pending = false;
         requestSent = false;
+        kitbotRequestActive = false;
         requestRetryTicks = 0;
+        failureRetryCooldownTicks = 0;
         deliveryBaseline = null;
         droppedSupply.reset();
     }
@@ -79,6 +105,10 @@ final class PlaneKitbotDeliveryTracker {
     private boolean requestIfNeeded(PlaneKitbotMessenger messenger) {
         if (pending) {
             retryPendingRequestIfReady(messenger);
+            return true;
+        }
+        if (failureRetryCooldownTicks > 0) {
+            failureRetryCooldownTicks--;
             return true;
         }
         if (requestSentThisCycle) return false;
@@ -92,6 +122,7 @@ final class PlaneKitbotDeliveryTracker {
     }
 
     private void retryPendingRequestIfReady(PlaneKitbotMessenger messenger) {
+        if (kitbotRequestActive) return;
         if (requestRetryTicks > 0) {
             requestRetryTicks--;
             return;
@@ -104,6 +135,7 @@ final class PlaneKitbotDeliveryTracker {
         if (!messenger.sendRefillRequest()) return false;
 
         requestSent = true;
+        kitbotRequestActive = false;
         requestRetryTicks = REQUEST_RETRY_TICKS;
         return true;
     }
