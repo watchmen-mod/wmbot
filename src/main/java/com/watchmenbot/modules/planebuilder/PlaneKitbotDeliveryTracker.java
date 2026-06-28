@@ -94,6 +94,7 @@ final class PlaneKitbotDeliveryTracker {
 
     void markSuppliesAvailable() {
         pending = false;
+        requestSentThisCycle = false;
         requestSent = false;
         kitbotRequestActive = false;
         requestRetryTicks = 0;
