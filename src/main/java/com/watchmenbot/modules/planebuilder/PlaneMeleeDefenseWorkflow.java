@@ -18,11 +18,27 @@ final class PlaneMeleeDefenseWorkflow {
         if (!hasImmediateThreat()) return false;
 
         FindItemResult sword = inventory.prepareUsableSword();
-        if (sword != null && sword.isHotbar()) InvUtils.swap(sword.slot(), false);
+        if (!preparedSwordCanDefend(sword)) return false;
+
+        InvUtils.swap(sword.slot(), false);
         return true;
+    }
+
+    boolean hasSafetyOpportunity() {
+        if (!guards.clientReady() || !hasImmediateThreat()) return false;
+
+        return swordAvailable(inventory.findHotbarSword(), inventory.findMainInventorySwordSlot());
     }
 
     boolean hasImmediateThreat() {
         return targeting.nearestCloseMeleeThreat() != null;
+    }
+
+    static boolean preparedSwordCanDefend(FindItemResult sword) {
+        return sword != null && sword.isHotbar();
+    }
+
+    static boolean swordAvailable(FindItemResult hotbarSword, int mainInventorySwordSlot) {
+        return preparedSwordCanDefend(hotbarSword) || mainInventorySwordSlot >= 0;
     }
 }

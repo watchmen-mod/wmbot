@@ -25,6 +25,7 @@ final class PlaneBowDefensePureTest {
         leadsMovingBowTargets();
         rejectsImpossibleBowAim();
         appliesCloseThreatTargetPolicies();
+        requiresUsableMeleeWeaponBeforeClaimingDefense();
         pinsKillAuraToSwords();
         keepsBowDefenseAvailableDuringReplenishPhases();
         startsShotSessionWithoutBowAimbot();
@@ -210,11 +211,11 @@ final class PlaneBowDefensePureTest {
 
     private static void appliesCloseThreatTargetPolicies() {
         assertTrue(
-            PlaneBowTargeting.bowTargetPolicy(4.6, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, false),
+            PlaneBowTargeting.bowTargetPolicy(3.1, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, false),
             "visible hostile just outside melee handoff range is bow eligible without confirmed aggro"
         );
         assertFalse(
-            PlaneBowTargeting.bowTargetPolicy(4.5, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, true),
+            PlaneBowTargeting.bowTargetPolicy(3.0, PlaneBuilderSettings.BOW_DEFENSE_RANGE, true, true),
             "hostile at melee handoff range is not bow eligible"
         );
         assertFalse(
@@ -222,8 +223,21 @@ final class PlaneBowDefensePureTest {
             "bow defense rejects threats outside the hardcoded range"
         );
         assertTrue(
-            PlaneBowTargeting.meleePrepPolicy(4.5, false),
-            "close hostile melee policy does not require confirmed aggro"
+            PlaneBowTargeting.meleeTargetPolicy(3.0, true),
+            "visible hostile at the handoff range is melee eligible"
+        );
+        assertFalse(
+            PlaneBowTargeting.meleeTargetPolicy(3.0, false),
+            "hidden close hostile does not block Plane Builder when melee cannot reach it"
+        );
+        assertFalse(
+            PlaneBowTargeting.meleeTargetPolicy(3.1, true),
+            "visible hostile outside the handoff range remains available to bow defense"
+        );
+        assertEquals(
+            3.0,
+            PlaneBowTargeting.distanceToHitbox(0.0, 64.0, 0.0, new Box(3.0, 64.0, -0.7, 4.4, 64.9, 0.7)),
+            "wide spider-like hitbox uses its nearest edge for the shared melee range"
         );
         assertFalse(
             KillAuraCompanionSettings.isHostileMobGroup(SpawnGroup.CREATURE),
@@ -240,6 +254,39 @@ final class PlaneBowDefensePureTest {
             KillAura.Weapon.Sword,
             KillAuraCompanionSettings.sessionWeapon(),
             "KillAura companion session pins attacks to swords"
+        );
+        assertTrue(
+            KillAuraCompanionSettings.sessionSettingNames().contains("range"),
+            "KillAura session snapshots and restores the attack range"
+        );
+        assertTrue(
+            KillAuraCompanionSettings.sessionSettingNames().contains("walls-range"),
+            "KillAura session snapshots and restores the through-wall range"
+        );
+        assertEquals(3.0, KillAuraCompanionSettings.ATTACK_RANGE, "KillAura uses conservative server-safe melee reach");
+        assertEquals(0.0, KillAuraCompanionSettings.WALLS_RANGE, "KillAura cannot claim hidden mobs through the plane");
+    }
+
+    private static void requiresUsableMeleeWeaponBeforeClaimingDefense() {
+        assertFalse(
+            PlaneMeleeDefenseWorkflow.preparedSwordCanDefend(null),
+            "missing sword cannot claim the melee-defense tick"
+        );
+        assertFalse(
+            PlaneMeleeDefenseWorkflow.preparedSwordCanDefend(new FindItemResult(10, 1)),
+            "sword outside the hotbar cannot claim the melee-defense tick before promotion"
+        );
+        assertTrue(
+            PlaneMeleeDefenseWorkflow.preparedSwordCanDefend(new FindItemResult(2, 1)),
+            "prepared hotbar sword can claim the melee-defense tick"
+        );
+        assertFalse(
+            PlaneMeleeDefenseWorkflow.swordAvailable(null, -1),
+            "no sword inventory source cannot preempt replenishment"
+        );
+        assertTrue(
+            PlaneMeleeDefenseWorkflow.swordAvailable(null, 10),
+            "main-inventory sword can preempt once so it can be promoted"
         );
     }
 

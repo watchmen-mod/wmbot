@@ -8,14 +8,14 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.Angerable;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.SkeletonEntity;
 import net.minecraft.entity.mob.WitchEntity;
+import net.minecraft.util.math.Box;
 
 final class PlaneBowTargeting {
-    static final double MELEE_PREP_RANGE = 4.5;
+    static final double MELEE_PREP_RANGE = KillAuraCompanionSettings.ATTACK_RANGE;
 
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -27,13 +27,6 @@ final class PlaneBowTargeting {
     Entity nearestCloseMeleeThreat() {
         Entity prioritized = highestPriorityThreat(this::closeMeleeThreat);
         return prioritized == null ? TargetUtils.get(this::closeMeleeThreat, SortPriority.LowestDistance) : prioritized;
-    }
-
-    boolean nearbyHostileThreat(double range) {
-        return highestPriorityThreat(entity -> {
-            TargetFacts facts = targetFacts(entity);
-            return facts != null && facts.distance() <= range && (facts.visible() || facts.aggroedOnBot());
-        }) != null;
     }
 
     Entity lockedTarget(int targetId) {
@@ -49,14 +42,14 @@ final class PlaneBowTargeting {
         if (facts == null) return BowTargetStatus.INVALID;
         if (!facts.visible()) return BowTargetStatus.NOT_VISIBLE;
         if (facts.distance() > range) return BowTargetStatus.OUT_OF_RANGE;
-        if (facts.distance() <= MELEE_PREP_RANGE) return BowTargetStatus.MELEE_HANDOFF;
+        if (facts.meleeDistance() <= MELEE_PREP_RANGE) return BowTargetStatus.MELEE_HANDOFF;
 
         return BowTargetStatus.READY;
     }
 
     boolean closeMeleeThreat(Entity entity) {
         TargetFacts facts = targetFacts(entity);
-        return facts != null && meleePrepPolicy(facts.distance(), facts.aggroedOnBot());
+        return facts != null && meleeTargetPolicy(facts.meleeDistance(), facts.visible());
     }
 
     static boolean bowTargetPolicy(double distance, double maxRange, boolean visible, boolean aggroedOnBot) {
@@ -66,8 +59,18 @@ final class PlaneBowTargeting {
         return true;
     }
 
-    static boolean meleePrepPolicy(double distance, boolean aggroedOnBot) {
-        return distance <= MELEE_PREP_RANGE;
+    static boolean meleeTargetPolicy(double distance, boolean visible) {
+        return visible && distance <= MELEE_PREP_RANGE;
+    }
+
+    static double distanceToHitbox(double x, double y, double z, Box hitbox) {
+        double nearestX = Math.max(hitbox.minX, Math.min(x, hitbox.maxX));
+        double nearestY = Math.max(hitbox.minY, Math.min(y, hitbox.maxY));
+        double nearestZ = Math.max(hitbox.minZ, Math.min(z, hitbox.maxZ));
+        double dx = x - nearestX;
+        double dy = y - nearestY;
+        double dz = z - nearestZ;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     static int threatPriority(boolean witch, boolean skeleton, boolean creeper, boolean hostile) {
@@ -121,15 +124,14 @@ final class PlaneBowTargeting {
         )) return null;
         if (entity.hasCustomName()) return null;
 
-        boolean aggroedOnBot = KillAuraCompanionSettings.isAggroedOnBot(
-            mob.getTarget() == mc.player,
-            entity instanceof Angerable angerable ? angerable.getAngryAt() : null,
-            mc.player.getUuid()
+        return new TargetFacts(
+            mc.player.distanceTo(entity),
+            distanceToHitbox(mc.player.getX(), mc.player.getY(), mc.player.getZ(), entity.getBoundingBox()),
+            PlayerUtils.canSeeEntity(entity)
         );
-        return new TargetFacts(mc.player.distanceTo(entity), PlayerUtils.canSeeEntity(entity), aggroedOnBot);
     }
 
-    private record TargetFacts(double distance, boolean visible, boolean aggroedOnBot) {
+    private record TargetFacts(double distance, double meleeDistance, boolean visible) {
     }
 
     enum BowTargetStatus {

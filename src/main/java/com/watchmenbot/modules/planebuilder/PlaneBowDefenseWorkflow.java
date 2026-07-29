@@ -125,10 +125,6 @@ final class PlaneBowDefenseWorkflow {
         );
     }
 
-    boolean hasImmediateThreat(double range) {
-        return guards.clientReady() && targeting.nearbyHostileThreat(range);
-    }
-
     void reset() {
         stop();
         logThrottleTicks = 0;

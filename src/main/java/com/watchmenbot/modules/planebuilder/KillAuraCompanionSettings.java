@@ -3,6 +3,7 @@ package com.watchmenbot.modules.planebuilder;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.systems.modules.combat.KillAura;
 import meteordevelopment.meteorclient.utils.entity.EntityUtils;
+import meteordevelopment.meteorclient.utils.entity.SortPriority;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.nbt.NbtCompound;
@@ -15,11 +16,21 @@ import java.util.UUID;
 
 final class KillAuraCompanionSettings {
     static final int MAX_TARGETS = 5;
+    static final double ATTACK_RANGE = 3.0;
+    static final double WALLS_RANGE = 0.0;
 
     private static final String WEAPON = "weapon";
+    private static final String ROTATE = "rotate";
     private static final String ENTITIES = "entities";
     private static final String AUTO_SWITCH = "auto-switch";
     private static final String SWAP_BACK = "swap-back";
+    private static final String ONLY_ON_CLICK = "only-on-click";
+    private static final String ONLY_ON_LOOK = "only-on-look";
+    private static final String PRIORITY = "priority";
+    private static final String RANGE = "range";
+    private static final String WALLS_RANGE_SETTING = "walls-range";
+    private static final String IGNORE_NAMED = "ignore-named";
+    private static final String IGNORE_TAMED = "ignore-tamed";
     private static final String MAX_TARGETS_SETTING = "max-targets";
     private static final String MOB_AGE_FILTER = "mob-age-filter";
 
@@ -32,9 +43,17 @@ final class KillAuraCompanionSettings {
             .toList();
 
         setting(killAura, WEAPON, KillAura.Weapon.class).set(sessionWeapon());
-        setting(killAura, ENTITIES, Set.class).set(entities());
+        setting(killAura, ROTATE, KillAura.RotationMode.class).set(KillAura.RotationMode.Always);
+        setting(killAura, ENTITIES, Set.class).set(hostileEntities());
         setting(killAura, AUTO_SWITCH, Boolean.class).set(true);
         setting(killAura, SWAP_BACK, Boolean.class).set(true);
+        setting(killAura, ONLY_ON_CLICK, Boolean.class).set(false);
+        setting(killAura, ONLY_ON_LOOK, Boolean.class).set(false);
+        setting(killAura, PRIORITY, SortPriority.class).set(SortPriority.LowestDistance);
+        setting(killAura, RANGE, Double.class).set(ATTACK_RANGE);
+        setting(killAura, WALLS_RANGE_SETTING, Double.class).set(WALLS_RANGE);
+        setting(killAura, IGNORE_NAMED, Boolean.class).set(true);
+        setting(killAura, IGNORE_TAMED, Boolean.class).set(true);
         setting(killAura, MAX_TARGETS_SETTING, Integer.class).set(MAX_TARGETS);
         setting(killAura, MOB_AGE_FILTER, KillAura.EntityAge.class).set(KillAura.EntityAge.Both);
 
@@ -44,9 +63,17 @@ final class KillAuraCompanionSettings {
     static List<String> sessionSettingNames() {
         return List.of(
             WEAPON,
+            ROTATE,
             ENTITIES,
             AUTO_SWITCH,
             SWAP_BACK,
+            ONLY_ON_CLICK,
+            ONLY_ON_LOOK,
+            PRIORITY,
+            RANGE,
+            WALLS_RANGE_SETTING,
+            IGNORE_NAMED,
+            IGNORE_TAMED,
             MAX_TARGETS_SETTING,
             MOB_AGE_FILTER
         );

@@ -672,11 +672,11 @@ final class PlaneUtilityPureTest {
         assertTrue(KillAuraCompanionSettings.isAggroedOnBot(false, botUuid, botUuid), "bow defense accepts angerable mobs angry at the bot");
         assertFalse(KillAuraCompanionSettings.isAggroedOnBot(false, otherUuid, botUuid), "bow defense rejects mobs angry at someone else");
         assertFalse(KillAuraCompanionSettings.isAggroedOnBot(false, null, botUuid), "bow defense rejects mobs with no bot aggro");
-        assertTrue(PlaneBowTargeting.meleePrepPolicy(4.5, true), "melee prep runs for close aggroed threats");
-        assertFalse(PlaneBowTargeting.meleePrepPolicy(4.6, true), "melee prep ignores threats outside KillAura range");
-        assertTrue(PlaneBowTargeting.meleePrepPolicy(4.0, false), "melee prep handles close threats even before aggro is confirmed");
-        assertFalse(PlaneBowTargeting.bowTargetPolicy(4.5, 20.0, true, true), "bow defense leaves melee-range threats to KillAura");
-        assertTrue(PlaneBowTargeting.bowTargetPolicy(4.6, 20.0, true, true), "bow defense accepts aggroed threats outside melee range");
+        assertTrue(PlaneBowTargeting.meleeTargetPolicy(3.0, true), "melee defense runs for visible close threats");
+        assertFalse(PlaneBowTargeting.meleeTargetPolicy(3.1, true), "melee defense ignores threats outside KillAura range");
+        assertFalse(PlaneBowTargeting.meleeTargetPolicy(4.0, false), "melee defense ignores hidden threats that KillAura cannot reach");
+        assertFalse(PlaneBowTargeting.bowTargetPolicy(3.0, 20.0, true, true), "bow defense leaves melee-range threats to KillAura");
+        assertTrue(PlaneBowTargeting.bowTargetPolicy(3.1, 20.0, true, true), "bow defense accepts aggroed threats outside melee range");
         assertTrue(PlaneBowTargeting.bowTargetPolicy(5.9, 20.0, true, false), "bow defense accepts visible threats outside melee range before aggro is confirmed");
         assertTrue(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, true, false), "bow defense accepts visible missing-aggro targets at spacing threshold");
         assertFalse(PlaneBowTargeting.bowTargetPolicy(6.0, 20.0, false, true), "bow defense still requires visibility");
