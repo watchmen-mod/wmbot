@@ -35,6 +35,7 @@ final class PlaneReplenishPureTest {
         PlaneReplenishCleanupPureTest.run();
         plansServiceHoleReadiness();
         plansMissingObsidianRecovery();
+        warnsWhenLooseObsidianBecomesRequired();
         plansMissingPickaxeRecovery();
         tracksReplenishActivePhases();
         tracksPhasePolicy();
@@ -492,6 +493,21 @@ final class PlaneReplenishPureTest {
             Phase.MISSING_OBSIDIAN,
             PlaneReplenishDecisions.missingObsidianServiceHoleRecoveryPhase(ServiceHoleContext.Status.READY_REPLACEABLE, false),
             "replaceable service hole waits until obsidian can be prepared"
+        );
+    }
+
+    private static void warnsWhenLooseObsidianBecomesRequired() {
+        assertTrue(
+            PlaneReplenishWorkflow.shouldWarnMissingObsidian(Phase.CLOSING_SERVICE_HOLE, Phase.MISSING_OBSIDIAN),
+            "entering missing obsidian warns the user"
+        );
+        assertFalse(
+            PlaneReplenishWorkflow.shouldWarnMissingObsidian(Phase.MISSING_OBSIDIAN, Phase.MISSING_OBSIDIAN),
+            "remaining in missing obsidian does not spam warnings"
+        );
+        assertFalse(
+            PlaneReplenishWorkflow.shouldWarnMissingObsidian(Phase.CLOSING_SERVICE_HOLE, Phase.IDLE),
+            "normal service-hole close does not warn"
         );
     }
 

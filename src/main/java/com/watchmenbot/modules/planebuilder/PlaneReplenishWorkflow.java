@@ -16,6 +16,7 @@ final class PlaneReplenishWorkflow {
     private final PlaneReplenishManagedShulkerWorkflow managedShulkers;
     private final PlaneReplenishCleanupWorkflow cleanup;
     private final PlaneRuntimeConfig config;
+    private final WorkflowLogger logger;
     private final Map<Phase, PlaneReplenishTransition> transitions;
 
     private Phase phase = Phase.IDLE;
@@ -139,6 +140,7 @@ final class PlaneReplenishWorkflow {
             components.trashCleanup()
         );
         config = components.config();
+        logger = components.logger();
         managedShulkers = new PlaneReplenishManagedShulkerWorkflow(
             context,
             inventory,
@@ -244,6 +246,9 @@ final class PlaneReplenishWorkflow {
 
         PlaneReplenishTransition transition = transitions.get(phase);
         phase = transition == null ? phase : transition.next();
+        if (shouldWarnMissingObsidian(previousPhase, phase)) {
+            logger.warning("Plane Builder needs loose obsidian. Add loose obsidian to your inventory to continue.");
+        }
         if (phase == Phase.MISSING_PICKAXE && previousPhase != Phase.MISSING_PICKAXE) {
             missingPickaxeReturnPhase = previousPhase;
         }
@@ -257,6 +262,10 @@ final class PlaneReplenishWorkflow {
             serviceHoles.resetOpenWatchdog();
         }
         return new ReplenishTickResult(phase, allowsBowDefenseDuringReplenish());
+    }
+
+    static boolean shouldWarnMissingObsidian(Phase previousPhase, Phase currentPhase) {
+        return currentPhase == Phase.MISSING_OBSIDIAN && previousPhase != Phase.MISSING_OBSIDIAN;
     }
 
     static Set<Phase> transitionPhases() {
